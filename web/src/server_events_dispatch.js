@@ -110,7 +110,7 @@ export function dispatch_normal_event(event) {
             realm.custom_profile_fields = event.fields;
             settings_profile_fields.populate_profile_fields(realm.custom_profile_fields);
             settings_account.add_custom_profile_fields_to_settings();
-            navbar_alerts.maybe_show_empty_required_profile_fields_alert();
+            navbar_alerts.maybe_toggle_empty_required_profile_fields_banner();
             break;
 
         case "default_streams":
@@ -211,12 +211,13 @@ export function dispatch_normal_event(event) {
                 allow_edit_history: noop,
                 allow_message_editing: noop,
                 avatar_changes_disabled: settings_account.update_avatar_change_display,
-                bot_creation_policy: settings_bots.update_bot_permissions_ui,
                 can_add_custom_emoji_group: noop,
                 can_add_subscribers_group: noop,
+                can_create_bots_group: noop,
                 can_create_groups: noop,
                 can_create_private_channel_group: noop,
                 can_create_public_channel_group: noop,
+                can_create_write_only_bots_group: noop,
                 can_delete_any_message_group: noop,
                 can_delete_own_message_group: noop,
                 can_manage_all_groups: noop,
@@ -320,6 +321,13 @@ export function dispatch_normal_event(event) {
                                 }
 
                                 if (
+                                    key === "can_create_bots_group" ||
+                                    key === "can_create_write_only_bots_group"
+                                ) {
+                                    settings_bots.update_bot_permissions_ui();
+                                }
+
+                                if (
                                     key === "can_create_public_channel_group" ||
                                     key === "can_create_private_channel_group" ||
                                     key === "can_create_web_public_channel_group"
@@ -387,7 +395,7 @@ export function dispatch_normal_event(event) {
             if (current_user.is_admin) {
                 // Update the UI notice about the user's profile being
                 // incomplete, as we might have filled in the missing field(s).
-                navbar_alerts.show_profile_incomplete(navbar_alerts.check_profile_incomplete());
+                navbar_alerts.toggle_organization_profile_incomplete_banner();
             }
             break;
         }

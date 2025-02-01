@@ -20,6 +20,37 @@ format used by the Zulip server that they are interacting with.
 
 ## Changes in Zulip 10.0
 
+**Feature level 346**
+
+* [Markdown message formatting](/api/message-formatting#links-to-channels-topics-and-messages):
+  Added support for empty string as a valid topic name in syntaxes
+  for linking to topics and messages.
+
+**Feature level 345**
+
+* `POST /remotes/server/register/transfer`,
+  `POST /remotes/server/register/verify_challenge`,
+  `POST /zulip-services/verify/{access_token}/`: Added new API
+  endpoints for transferring Zulip services registrations.
+* `POST /remotes/server/register`: Added new response format for
+  hostnames that are already registere.
+
+**Feature level 344**
+
+* `PATCH /realm`, [`GET /events`](/api/get-events),
+  [`POST /register`](/api/register-queue):
+  Added two new realm settings, `can_create_bots_group` which is a
+  [group-setting value](/api/group-setting-values) describing the set of users
+  with permission to create bot users in the organization, and
+  `can_create_write_only_bots_group`  which is a
+  [group-setting value](/api/group-setting-values) describing the set of users
+  with permission to create bot users who can only send messages in the organization
+  in addition to the users who are in `can_create_bots_group`.
+* `PATCH /realm`, [`GET /events`](/api/get-events): Removed
+  `bot_creation_policy` property, as the permission to create bot users
+  in the organization is now controlled by two new realm settings,
+  `can_create_bots_group` and `can_create_write_only_bots_group`.
+
 **Feature level 343**
 
 * [`GET /events`](/api/get-events): Added a new field `stream_ids` to replace

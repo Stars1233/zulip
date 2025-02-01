@@ -46,12 +46,7 @@ from zerver.lib.user_groups import (
 )
 from zerver.lib.validator import check_capped_url, check_string
 from zerver.models import Realm, RealmReactivationStatus, RealmUserDefault, UserProfile
-from zerver.models.realms import (
-    BotCreationPolicyEnum,
-    DigestWeekdayEnum,
-    OrgTypeEnum,
-    WildcardMentionPolicyEnum,
-)
+from zerver.models.realms import DigestWeekdayEnum, OrgTypeEnum, WildcardMentionPolicyEnum
 from zerver.views.user_settings import (
     check_information_density_setting_values,
     check_settings_values,
@@ -131,11 +126,12 @@ def update_realm(
     send_welcome_emails: Json[bool] | None = None,
     digest_emails_enabled: Json[bool] | None = None,
     message_content_allowed_in_email_notifications: Json[bool] | None = None,
-    bot_creation_policy: Json[BotCreationPolicyEnum] | None = None,
+    can_create_bots_group: Json[GroupSettingChangeRequest] | None = None,
     can_create_groups: Json[GroupSettingChangeRequest] | None = None,
     can_create_public_channel_group: Json[GroupSettingChangeRequest] | None = None,
     can_create_private_channel_group: Json[GroupSettingChangeRequest] | None = None,
     can_create_web_public_channel_group: Json[GroupSettingChangeRequest] | None = None,
+    can_create_write_only_bots_group: Json[GroupSettingChangeRequest] | None = None,
     can_invite_users_group: Json[GroupSettingChangeRequest] | None = None,
     can_manage_all_groups: Json[GroupSettingChangeRequest] | None = None,
     can_move_messages_between_channels_group: Json[GroupSettingChangeRequest] | None = None,

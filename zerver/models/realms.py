@@ -117,14 +117,6 @@ class CreateWebPublicStreamPolicyEnum(IntEnum):
     OWNERS_ONLY = 7
 
 
-class BotCreationPolicyEnum(IntEnum):
-    # This value is also being used in web/src/settings_bots.bot_creation_policy_values.
-    # On updating it here, update it there as well.
-    EVERYONE = 1
-    LIMIT_GENERIC_BOTS = 2
-    ADMINS_ONLY = 3
-
-
 class MoveMessagesBetweenStreamsPolicyEnum(IntEnum):
     MEMBERS_ONLY = 1
     ADMINS_ONLY = 2
@@ -340,6 +332,16 @@ class Realm(models.Model):  # type: ignore[django-manager-missing] # django-stub
         "UserGroup", on_delete=models.RESTRICT, related_name="+"
     )
 
+    # UserGroup which is allowed to create bots.
+    can_create_bots_group = models.ForeignKey(
+        "UserGroup", on_delete=models.RESTRICT, related_name="+"
+    )
+
+    # UserGroup which is allowed to create incoming webhooks.
+    can_create_write_only_bots_group = models.ForeignKey(
+        "UserGroup", on_delete=models.RESTRICT, related_name="+"
+    )
+
     # Global policy for who is allowed to use wildcard mentions in
     # streams with a large number of subscribers.  Anyone can use
     # wildcard mentions in small streams regardless of this setting.
@@ -549,9 +551,6 @@ class Realm(models.Model):  # type: ignore[django-manager-missing] # django-stub
     }
     plan_type = models.PositiveSmallIntegerField(default=PLAN_TYPE_SELF_HOSTED)
 
-    bot_creation_policy = models.PositiveSmallIntegerField(default=BotCreationPolicyEnum.EVERYONE)
-    BOT_CREATION_POLICY_TYPES = [field.value for field in BotCreationPolicyEnum]
-
     UPLOAD_QUOTA_LIMITED = 5
     UPLOAD_QUOTA_STANDARD_FREE = 50
     custom_upload_quota_gb = models.IntegerField(null=True)
@@ -632,7 +631,6 @@ class Realm(models.Model):  # type: ignore[django-manager-missing] # django-stub
         allow_edit_history=bool,
         allow_message_editing=bool,
         avatar_changes_disabled=bool,
-        bot_creation_policy=int,
         default_code_block_language=str,
         default_language=str,
         description=str,
@@ -697,6 +695,13 @@ class Realm(models.Model):  # type: ignore[django-manager-missing] # django-stub
             allow_everyone_group=False,
             default_group_name=SystemGroups.MEMBERS,
         ),
+        can_create_bots_group=GroupPermissionSetting(
+            require_system_group=False,
+            allow_internet_group=False,
+            allow_nobody_group=True,
+            allow_everyone_group=False,
+            default_group_name=SystemGroups.MEMBERS,
+        ),
         can_create_groups=GroupPermissionSetting(
             require_system_group=False,
             allow_internet_group=False,
@@ -730,6 +735,13 @@ class Realm(models.Model):  # type: ignore[django-manager-missing] # django-stub
                 SystemGroups.OWNERS,
                 SystemGroups.NOBODY,
             ],
+        ),
+        can_create_write_only_bots_group=GroupPermissionSetting(
+            require_system_group=False,
+            allow_internet_group=False,
+            allow_nobody_group=True,
+            allow_everyone_group=False,
+            default_group_name=SystemGroups.MEMBERS,
         ),
         can_delete_any_message_group=GroupPermissionSetting(
             require_system_group=False,
@@ -1180,6 +1192,8 @@ def get_realm_with_settings(realm_id: int) -> Realm:
         "can_add_custom_emoji_group__named_user_group",
         "can_add_subscribers_group",
         "can_add_subscribers_group__named_user_group",
+        "can_create_bots_group",
+        "can_create_bots_group__named_user_group",
         "can_create_groups",
         "can_create_groups__named_user_group",
         "can_create_public_channel_group",
@@ -1188,6 +1202,8 @@ def get_realm_with_settings(realm_id: int) -> Realm:
         "can_create_private_channel_group__named_user_group",
         "can_create_web_public_channel_group",
         "can_create_web_public_channel_group__named_user_group",
+        "can_create_write_only_bots_group",
+        "can_create_write_only_bots_group__named_user_group",
         "can_delete_any_message_group",
         "can_delete_any_message_group__named_user_group",
         "can_delete_own_message_group",

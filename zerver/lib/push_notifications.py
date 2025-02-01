@@ -1528,3 +1528,20 @@ class InvalidRemotePushDeviceTokenError(JsonableError):
 class PushNotificationsDisallowedByBouncerError(Exception):
     def __init__(self, reason: str) -> None:
         self.reason = reason
+
+
+class HostnameAlreadyInUseBouncerError(JsonableError):
+    code = ErrorCode.HOSTNAME_ALREADY_IN_USE_BOUNCER_ERROR
+    docs_url = "https://zulip.readthedocs.io/en/latest/production/mobile-push-notifications.html#moving-your-registration-to-a-new-server"
+
+    data_fields = ["hostname", "docs_url"]
+
+    def __init__(self, hostname: str) -> None:
+        self.hostname: str = hostname
+
+    @staticmethod
+    @override
+    def msg_format() -> str:
+        # This message is not read by any of the client apps, just potentially displayed
+        # via server administration tools, so it doesn't need translations.
+        return "A server with hostname {hostname} already exists"

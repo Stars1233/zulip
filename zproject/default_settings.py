@@ -215,6 +215,8 @@ POLICIES_DIRECTORY: str = "zerver/policies_absent"
 # Security
 ENABLE_FILE_LINKS = False
 ENABLE_GRAVATAR = True
+## Overrides the above setting for individual realms, by integer ID.
+GRAVATAR_REALM_OVERRIDE: dict[int, bool] = {}
 INLINE_IMAGE_PREVIEW = True
 INLINE_URL_EMBED_PREVIEW = True
 NAME_CHANGES_DISABLED = False
@@ -343,7 +345,7 @@ RATE_LIMITING_RULES: dict[str, list[tuple[int, int]]] = {}
 # only, so we don't need a nice overriding system for them like we do
 # for RATE_LIMITING_RULES.
 ABSOLUTE_USAGE_LIMITS_BY_ENDPOINT = {
-    "verify_registration_takeover_challenge_ack_endpoint": [
+    "verify_registration_transfer_challenge_ack_endpoint": [
         # 30 requests per day
         (86400, 30),
     ],
