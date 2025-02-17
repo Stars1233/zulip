@@ -167,24 +167,24 @@
     /*
     This is the header, aka the navbar.
     */
-    --header-height: 40px;
+    --header-height: 2.5em; /* 40px at 16px em */
 
     /*
     At 600px, the header starts taking up more than 5%
     of the screen. We make it shorter to leave more space
     to see the rest of the app. */
     @media (height < $short_navbar_cutoff_height) {
-        --header-height: 30px;
+        --header-height: 1.875em; /* 30px at 16px em */
     }
 
     /*
     Height of the search box, which appears in the header.
     */
-    --search-box-height: 32px;
-    --search-box-width: 150px;
+    --search-box-height: 2em; /* 32px at 16px em */
+    --search-box-width: 9.375em; /* 150px at 16px em */
 
     @media (width < $md_min) {
-        --search-box-width: 40px;
+        --search-box-width: 2.5em; /* 40px at 16px em */
     }
 
     /*
@@ -192,7 +192,7 @@
         is reduced to fit the available space.
     */
     @media (height < $short_navbar_cutoff_height) {
-        --search-box-height: 28px;
+        --search-box-height: 1.75em; /* 28px at 16px em */
     }
 
     /*
@@ -527,14 +527,19 @@
     /* Overlay heights for streams modal */
     --overlay-container-height: 95vh;
     --overlay-container-max-height: 1000px;
-    /* .subscriptions-header */
-    --subscriptions-overlay-header-height: 45px;
-    /* .display-type */
-    --subscriptions-overlay-display-type-height: 44px;
+    /* The width of the settings sidebar. */
+    --settings-sidebar-width: 18.2142em; /* 255px at 14px/em */
+    /* .subscriptions-header and .settings-header */
+    --settings-overlay-header-height: 3.2142em; /* 45px at 14px/em */
+    /* .display-type and .list-toggler-container
+       in subscriptions and user group settings overlays */
+    --settings-overlay-subheader-height: 3.1428em; /* 44px at 14px/em */
+    --settings-overlay-header-button-height: 2em;
     /* .settings-sticky-footer */
     --subscriptions-overlay-sticky-footer-height: 60px;
     /* Informational overlay */
     --informational-overlay-max-width: 43.75em;
+    --modal-input-width: 23.2142em;
 
     /*
     Maximum height of the compose box when it is not in maximised state. This
@@ -892,6 +897,21 @@
     --color-text-settings-field-hint: hsl(0deg 0% 57%);
     --color-text-clear-search-button: hsl(0deg 0% 80%);
     --color-text-clear-search-button-hover: hsl(0deg 0% 0%);
+
+    /* Link colors */
+    --color-text-link: hsl(210deg 94% 42%);
+    --color-text-link-decoration: color-mix(
+        in oklch,
+        hsl(210deg 94% 42%) 20%,
+        transparent
+    );
+    --color-text-link-hover: hsl(212deg 100% 50%);
+    --color-text-link-decoration-hover: color-mix(
+        in oklch,
+        hsl(212deg 100% 50%) 70%,
+        transparent
+    );
+    --color-text-link-active: hsl(212deg 100% 30%);
     /* These colors are from Bootstrap. */
     --color-text-generic-link: #08c;
     --color-text-generic-link-interactive: #005580;
@@ -1092,7 +1112,6 @@
     --color-background-button-inbox-selected: hsl(0deg 0% 0% / 5%);
     --color-background-button-inbox-focus: hsl(0deg 0% 80%);
     --color-icons-inbox: hsl(0deg 0% 0%);
-    --color-background-icon-close-hover: hsl(0deg 0% 0% / 5%);
 
     /* Navbar dropdown menu constants - Values from Figma design */
     --box-shadow-popover-menu: 0 2.78px 4.11px 0 hsl(0deg 0% 0% / 6%),
@@ -1884,6 +1903,21 @@
     --color-text-settings-field-hint: hsl(0deg 0% 52%);
     --color-text-clear-search-button: hsl(236deg 33% 80%);
     --color-text-clear-search-button-hover: hsl(0deg 0% 100%);
+
+    /* Link colors */
+    --color-text-link: hsl(200deg 100% 50%);
+    --color-text-link-decoration: color-mix(
+        in oklch,
+        hsl(200deg 100% 50%) 20%,
+        transparent
+    );
+    --color-text-link-hover: hsl(200deg 100% 60%);
+    --color-text-link-decoration-hover: color-mix(
+        in oklch,
+        hsl(200deg 100% 60%) 70%,
+        transparent
+    );
+    --color-text-link-active: hsl(200deg 100% 50%);
     --color-text-generic-link: #08c;
     --color-text-generic-link-interactive: hsl(200deg 79% 66%);
 
@@ -2086,7 +2120,6 @@
     --color-background-button-inbox-selected: hsl(0deg 0% 100% / 5%);
     --color-background-button-inbox-focus: hsl(0deg 0% 20%);
     --color-icons-inbox: hsl(0deg 0% 100%);
-    --color-background-icon-close-hover: hsl(0deg 0% 100% / 5%);
 
     /* Navbar dropdown menu constants - Values from Figma design */
     --box-shadow-popover-menu: 0 2.78px 4.12px 0 hsl(0deg 0% 0% / 10%),

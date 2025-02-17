@@ -138,6 +138,7 @@ const keydown_cmd_or_ctrl_mappings = {
     75: {name: "search_with_k", message_view_only: false}, // 'K'
     83: {name: "star_message", message_view_only: true}, // 'S'
     190: {name: "narrow_to_compose_target", message_view_only: true}, // '.'
+    222: {name: "open_saved_snippet_dropdown", message_view_only: true}, // '''
 };
 
 const keydown_alt_mappings = {
@@ -495,6 +496,11 @@ export function process_enter_key(e) {
             // the intention is that we want it super easy
             // to close stream search.
             stream_list.clear_and_hide_search();
+            return true;
+        }
+
+        // Don't send the message if topic box is focused.
+        if (compose.is_topic_input_focused()) {
             return true;
         }
 
@@ -884,6 +890,13 @@ export function process_hotkey(e, hotkey) {
         // Note that there is special handling for Enter/Esc too, but
         // we handle this in other functions.
 
+        if (event_name === "open_saved_snippet_dropdown") {
+            const $messagebox = $(":focus").parents(".messagebox");
+            if ($messagebox.length === 1) {
+                $messagebox.find(".saved_snippets_widget")[0].click();
+            }
+        }
+
         if (event_name === "left_arrow" && compose_state.focus_in_empty_compose()) {
             message_edit.edit_last_sent_message();
             return true;
@@ -994,7 +1007,13 @@ export function process_hotkey(e, hotkey) {
             );
             return true;
         case "query_streams":
-            stream_list.initiate_search();
+            if (pm_list.is_zoomed_in()) {
+                pm_list.focus_pm_search_filter();
+            } else if (stream_list.is_zoomed_in()) {
+                topic_list.focus_topic_search_filter();
+            } else {
+                stream_list.initiate_search();
+            }
             return true;
         case "query_users":
             activity_ui.initiate_search();

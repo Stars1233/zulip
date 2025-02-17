@@ -669,15 +669,19 @@ def get_direct_memberships_of_users(user_group: UserGroup, members: list[UserPro
 # https://code.djangoproject.com/ticket/28919
 
 
-def get_recursive_subgroups(user_group: UserGroup) -> QuerySet[UserGroup]:
+def get_recursive_subgroups_union_for_groups(user_group_ids: list[int]) -> QuerySet[UserGroup]:
     cte = With.recursive(
-        lambda cte: UserGroup.objects.filter(id=user_group.id)
+        lambda cte: UserGroup.objects.filter(id__in=user_group_ids)
         .values(group_id=F("id"))
         .union(
             cte.join(NamedUserGroup, direct_supergroups=cte.col.group_id).values(group_id=F("id"))
         )
     )
     return cte.join(UserGroup, id=cte.col.group_id).with_cte(cte)
+
+
+def get_recursive_subgroups(user_group_id: int) -> QuerySet[UserGroup]:
+    return get_recursive_subgroups_union_for_groups([user_group_id])
 
 
 def get_recursive_strict_subgroups(user_group: UserGroup) -> QuerySet[NamedUserGroup]:
@@ -694,9 +698,16 @@ def get_recursive_strict_subgroups(user_group: UserGroup) -> QuerySet[NamedUserG
     return cte.join(NamedUserGroup, id=cte.col.group_id).with_cte(cte)
 
 
-def get_recursive_group_members(user_group: UserGroup) -> QuerySet[UserProfile]:
+def get_recursive_group_members(user_group_id: int) -> QuerySet[UserProfile]:
+    return get_recursive_group_members_union_for_groups([user_group_id])
+
+
+def get_recursive_group_members_union_for_groups(
+    user_group_ids: list[int],
+) -> QuerySet[UserProfile]:
     return UserProfile.objects.filter(
-        is_active=True, direct_groups__in=get_recursive_subgroups(user_group)
+        is_active=True,
+        direct_groups__in=get_recursive_subgroups_union_for_groups(user_group_ids),
     )
 
 
@@ -728,7 +739,7 @@ def is_user_in_group(
     if direct_member_only:
         return get_user_group_direct_members(user_group=user_group).filter(id=user.id).exists()
 
-    return get_recursive_group_members(user_group=user_group).filter(id=user.id).exists()
+    return get_recursive_group_members(user_group_id=user_group.id).filter(id=user.id).exists()
 
 
 def is_any_user_in_group(
@@ -737,7 +748,7 @@ def is_any_user_in_group(
     if direct_member_only:
         return get_user_group_direct_members(user_group=user_group).filter(id__in=user_ids).exists()
 
-    return get_recursive_group_members(user_group=user_group).filter(id__in=user_ids).exists()
+    return get_recursive_group_members(user_group_id=user_group.id).filter(id__in=user_ids).exists()
 
 
 def get_user_group_member_ids(
@@ -746,7 +757,7 @@ def get_user_group_member_ids(
     if direct_member_only:
         member_ids: Iterable[int] = get_user_group_direct_member_ids(user_group)
     else:
-        member_ids = get_recursive_group_members(user_group).values_list("id", flat=True)
+        member_ids = get_recursive_group_members(user_group.id).values_list("id", flat=True)
 
     return list(member_ids)
 
@@ -781,7 +792,7 @@ def get_root_id_annotated_recursive_subgroups_for_groups(
     # each group root_id and annotates it with that group.
 
     cte = With.recursive(
-        lambda cte: NamedUserGroup.objects.filter(id__in=user_group_ids, realm=realm_id)
+        lambda cte: UserGroup.objects.filter(id__in=user_group_ids, realm=realm_id)
         .values(group_id=F("id"), root_id=F("id"))
         .union(
             cte.join(NamedUserGroup, direct_supergroups=cte.col.group_id).values(
@@ -790,9 +801,7 @@ def get_root_id_annotated_recursive_subgroups_for_groups(
         )
     )
     recursive_subgroups = (
-        cte.join(NamedUserGroup, id=cte.col.group_id)
-        .with_cte(cte)
-        .annotate(root_id=cte.col.root_id)
+        cte.join(UserGroup, id=cte.col.group_id).with_cte(cte).annotate(root_id=cte.col.root_id)
     )
 
     return recursive_subgroups
@@ -1022,7 +1031,6 @@ def get_server_supported_permission_settings() -> ServerSupportedPermissionSetti
 
 def parse_group_setting_value(
     setting_value: int | AnonymousSettingGroupDict,
-    setting_name: str,
 ) -> int | AnonymousSettingGroupDict:
     if isinstance(setting_value, int):
         return setting_value

@@ -286,56 +286,6 @@ p.n-margin {
     box-shadow: inset 0 -1px 0 var(--color-navbar-bottom-border);
 }
 
-#navbar_alerts_wrapper {
-    font-size: 1rem;
-    position: relative;
-
-    .alert {
-        /* Since alerts are only rendered into the DOM when they are first
-           displayed, display: block is the right default for this setting. */
-        display: block;
-        margin: 0;
-        padding-top: 12px;
-        padding-bottom: 12px;
-
-        border: none;
-        border-radius: 0;
-
-        text-align: center;
-        text-shadow: none;
-        color: hsl(0deg 0% 100%);
-
-        &.alert-info {
-            background-color: hsl(170deg 46% 54%);
-
-            &.red {
-                background-color: hsl(0deg 46% 54%);
-            }
-        }
-
-        .close {
-            line-height: 24px;
-            position: absolute;
-            right: 18px;
-            top: 50%;
-            transform: translateY(-50%);
-        }
-
-        .alert-link {
-            color: hsl(169deg 100% 88%);
-            font-weight: 600;
-        }
-
-        &.red .alert-link {
-            color: hsl(0deg 100% 88%);
-        }
-
-        .buttons .alert-link {
-            margin: 0 5px;
-        }
-    }
-}
-
 .app {
     min-width: 100%;
     min-height: 100%;
@@ -1108,11 +1058,11 @@ nav {
 
         .nav-logo {
             display: inline-block;
-            height: 20px;
-            max-width: 200px;
+            height: 1.25em; /* 20px at 16px em */
+            max-width: 12.5em; /* 200px at 16px em */
 
             @media (height < $short_navbar_cutoff_height) {
-                height: 15px;
+                height: 0.9375em; /* 15px at 16px em */
             }
         }
 
@@ -1267,6 +1217,7 @@ div.toggle_resolve_topic_spinner .loading_indicator_spinner {
     vertical-align: bottom;
 }
 
+.add-user-group-container,
 .add_streams_container {
     display: inline-flex;
     align-items: center;
@@ -1300,7 +1251,7 @@ div.toggle_resolve_topic_spinner .loading_indicator_spinner {
 }
 
 .empty_feed_notice {
-    max-width: 600px;
+    max-width: 42.8571em;
     margin: 0 auto;
     padding: 3em 1em;
     text-align: center;
@@ -1309,7 +1260,7 @@ div.toggle_resolve_topic_spinner .loading_indicator_spinner {
 .empty-feed-notice-title {
     font-size: 1.5em;
     font-weight: 400;
-    line-height: 1;
+    line-height: inherit;
     word-wrap: break-word;
 }
 
@@ -1797,8 +1748,8 @@ body:not(.hide-left-sidebar) {
     }
 
     #top_navbar .column-right #personal-menu .header-button-avatar {
-        width: 20px;
-        height: 20px;
+        width: 1.25em; /* 20px at 16px em */
+        height: 1.25em; /* 20px at 16px em */
     }
 }
 
@@ -2068,12 +2019,12 @@ body:not(.hide-left-sidebar) {
     }
 
     .zulip-icon-gear {
-        font-size: 18px;
+        font-size: 1.125em; /* 18px at 16px em */
     }
 
     .zulip-icon-help-bigger,
     .zulip-icon-user-list {
-        font-size: 20px;
+        font-size: 1.25em; /* 20px at 16px em */
     }
 
     .zulip-icon-help {
@@ -2085,8 +2036,8 @@ body:not(.hide-left-sidebar) {
 
 #personal-menu {
     .header-button-avatar {
-        width: 24px;
-        height: 24px;
+        width: 1.5em; /* 24px at 16px em */
+        height: 1.5em; /* 24px at 16px em */
         background-size: cover;
         border-radius: 4px;
         background-color: var(--color-background-image-loader);
@@ -2094,6 +2045,7 @@ body:not(.hide-left-sidebar) {
     }
 }
 
-.empty-topic-display {
+.empty-topic-display,
+.empty-topic-placeholder-display::placeholder {
     font-style: italic;
 }

@@ -1,7 +1,9 @@
 import $ from "jquery";
+import _ from "lodash";
 
 import * as resolved_topic from "../shared/src/resolved_topic.ts";
 import render_compose_banner from "../templates/compose_banner/compose_banner.hbs";
+import render_guest_in_dm_recipient_warning from "../templates/compose_banner/guest_in_dm_recipient_warning.hbs";
 import render_not_subscribed_warning from "../templates/compose_banner/not_subscribed_warning.hbs";
 import render_private_stream_warning from "../templates/compose_banner/private_stream_warning.hbs";
 import render_stream_wildcard_warning from "../templates/compose_banner/stream_wildcard_warning.hbs";
@@ -20,9 +22,8 @@ import * as peer_data from "./peer_data.ts";
 import * as people from "./people.ts";
 import * as reactions from "./reactions.ts";
 import * as recent_senders from "./recent_senders.ts";
-import * as settings_config from "./settings_config.ts";
 import * as settings_data from "./settings_data.ts";
-import {current_user, realm} from "./state_data.ts";
+import {realm} from "./state_data.ts";
 import * as stream_data from "./stream_data.ts";
 import * as sub_store from "./sub_store.ts";
 import type {StreamSubscription} from "./sub_store.ts";
@@ -389,6 +390,72 @@ export function warn_if_in_search_view(): void {
     }
 }
 
+export function clear_guest_in_dm_recipient_warning(): void {
+    // We don't call set_recipient_guest_ids_for_dm_warning here, so
+    // that reopening the same draft won't make the banner reappear.
+    const classname = compose_banner.CLASSNAMES.guest_in_dm_recipient_warning;
+    $(`#compose_banners .${CSS.escape(classname)}`).remove();
+}
+
+// Only called on recipient change. Adds new banner if not already
+// exists or updates the existing banner or removes banner if no
+// guest in the dm.
+export function warn_if_guest_in_dm_recipient(): void {
+    if (!compose_state.composing()) {
+        return;
+    }
+    const recipient_ids = compose_pm_pill.get_user_ids();
+    const guest_ids = people.filter_other_guest_ids(recipient_ids);
+
+    if (
+        !realm.realm_enable_guest_user_dm_warning ||
+        compose_state.get_message_type() !== "private" ||
+        guest_ids.length === 0
+    ) {
+        clear_guest_in_dm_recipient_warning();
+        compose_state.set_recipient_guest_ids_for_dm_warning([]);
+        return;
+    }
+    // If warning was shown earlier for same guests in the recipients, do nothing.
+    if (_.isEqual(compose_state.get_recipient_guest_ids_for_dm_warning(), guest_ids)) {
+        return;
+    }
+
+    const guest_names = people.user_ids_to_full_names_array(guest_ids);
+    let banner_text: string;
+
+    if (guest_names.length === 1) {
+        banner_text = $t(
+            {defaultMessage: "{name} is a guest in this organization."},
+            {name: guest_names[0]},
+        );
+    } else {
+        const names_string = util.format_array_as_list(guest_names, "long", "conjunction");
+        banner_text = $t(
+            {defaultMessage: "{names} are guests in this organization."},
+            {names: names_string},
+        );
+    }
+
+    const classname = compose_banner.CLASSNAMES.guest_in_dm_recipient_warning;
+    let $banner = $(`#compose_banners .${CSS.escape(classname)}`);
+
+    compose_state.set_recipient_guest_ids_for_dm_warning(guest_ids);
+    // Update banner text if banner already exists.
+    if ($banner.length === 1) {
+        $banner.find(".banner_content").text(banner_text);
+        return;
+    }
+
+    $banner = $(
+        render_guest_in_dm_recipient_warning({
+            banner_text,
+            classname: compose_banner.CLASSNAMES.guest_in_dm_recipient_warning,
+        }),
+    );
+    compose_banner.append_compose_banner_to_banner_list($banner, $("#compose_banners"));
+}
+
 function show_stream_wildcard_warnings(opts: StreamWildcardOptions): void {
     const subscriber_count = peer_data.get_subscriber_count(opts.stream_id) || 0;
     const stream_name = sub_store.maybe_get_stream_name(opts.stream_id);
@@ -510,63 +577,20 @@ function is_recipient_large_topic(): boolean {
     return topic_participant_count_more_than_threshold(stream_id, compose_state.topic());
 }
 
-// Exported for tests
-export let wildcard_mention_policy_authorizes_user = (): boolean => {
-    if (
-        realm.realm_wildcard_mention_policy ===
-        settings_config.wildcard_mention_policy_values.by_everyone.code
-    ) {
-        return true;
-    }
-    if (
-        realm.realm_wildcard_mention_policy ===
-        settings_config.wildcard_mention_policy_values.nobody.code
-    ) {
-        return false;
-    }
-    if (
-        realm.realm_wildcard_mention_policy ===
-        settings_config.wildcard_mention_policy_values.by_admins_only.code
-    ) {
-        return current_user.is_admin;
-    }
-
-    if (
-        realm.realm_wildcard_mention_policy ===
-        settings_config.wildcard_mention_policy_values.by_moderators_only.code
-    ) {
-        return current_user.is_admin || current_user.is_moderator;
-    }
-
-    if (
-        realm.realm_wildcard_mention_policy ===
-        settings_config.wildcard_mention_policy_values.by_full_members.code
-    ) {
-        if (current_user.is_admin) {
-            return true;
-        }
-        const person = people.get_by_user_id(current_user.user_id);
-        const current_datetime = new Date(Date.now()).getTime();
-        const person_date_joined = new Date(person.date_joined).getTime();
-        const days = (current_datetime - person_date_joined) / 1000 / 86400;
-
-        return days >= realm.realm_waiting_period_threshold && !current_user.is_guest;
-    }
-    return !current_user.is_guest;
-};
-
-export function rewire_wildcard_mention_policy_authorizes_user(
-    value: typeof wildcard_mention_policy_authorizes_user,
-): void {
-    wildcard_mention_policy_authorizes_user = value;
+function user_can_mention_many_users(): boolean {
+    return settings_data.user_has_permission_for_group_setting(
+        realm.realm_can_mention_many_users_group,
+        "can_mention_many_users_group",
+        "realm",
+    );
 }
 
 export function stream_wildcard_mention_allowed(): boolean {
-    return !is_recipient_large_stream() || wildcard_mention_policy_authorizes_user();
+    return !is_recipient_large_stream() || user_can_mention_many_users();
 }
 
 export function topic_wildcard_mention_allowed(): boolean {
-    return !is_recipient_large_topic() || wildcard_mention_policy_authorizes_user();
+    return !is_recipient_large_topic() || user_can_mention_many_users();
 }
 
 export function set_wildcard_mention_threshold(value: number): void {
@@ -580,7 +604,7 @@ export function validate_stream_message_mentions(opts: StreamWildcardOptions): b
     // stream, check if they permission to do so. If yes, warn them
     // if they haven't acknowledged the wildcard warning yet.
     if (opts.stream_wildcard_mention !== null && subscriber_count > wildcard_mention_threshold) {
-        if (!wildcard_mention_policy_authorizes_user()) {
+        if (!user_can_mention_many_users()) {
             const new_row_html = render_wildcard_mention_not_allowed_error({
                 banner_type: compose_banner.ERROR,
                 classname: compose_banner.CLASSNAMES.wildcards_not_allowed,

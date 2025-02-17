@@ -177,7 +177,6 @@
         color: var(--color-text-item);
 
         &:hover {
-            color: var(--color-text-link);
             text-decoration: none;
         }
 
@@ -475,6 +474,7 @@ ul.popover-group-menu-member-list {
 
     .deactivated-user-icon {
         vertical-align: middle;
+        font-size: 0.7em;
     }
 
     #default-section {
@@ -1028,7 +1028,6 @@ ul.popover-group-menu-member-list {
         line-height: 1.1111em;
         color: var(--color-text-full-name);
         overflow-wrap: anywhere;
-        user-select: text;
 
         .zulip-icon.zulip-icon-bot {
             vertical-align: middle;

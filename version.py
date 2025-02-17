@@ -34,7 +34,7 @@ DESKTOP_WARNING_VERSION = "5.9.3"
 # new level means in api_docs/changelog.md, as well as "**Changes**"
 # entries in the endpoint's documentation in `zulip.yaml`.
 
-API_FEATURE_LEVEL = 343  # Last bumped for `stream_ids` field in stream deletion events.
+API_FEATURE_LEVEL = 353  # Last bumped for Zoom server to server video chat option.
 
 # Bump the minor PROVISION_VERSION to indicate that folks should provision
 # only when going from an old version of the code to a newer version. Bump
@@ -49,4 +49,4 @@ API_FEATURE_LEVEL = 343  # Last bumped for `stream_ids` field in stream deletion
 #   historical commits sharing the same major version, in which case a
 #   minor version bump suffices.
 
-PROVISION_VERSION = (311, 0)  # bumped 2024-01-29 to upgrade JavaScript dependencies
+PROVISION_VERSION = (312, 0)  # bumped 2024-02-14 to upgrade asgiref

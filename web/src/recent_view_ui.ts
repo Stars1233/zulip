@@ -606,6 +606,7 @@ type ConversationContext = {
           is_group: boolean;
           is_bot: boolean;
           user_circle_class: string | undefined;
+          has_unread_mention: boolean;
       }
     | {
           is_private: false;
@@ -658,7 +659,7 @@ function format_conversation(conversation_data: ConversationData): ConversationC
         const topic = last_msg.topic;
         const topic_display_name = util.get_final_topic_display_name(topic);
         const is_empty_string_topic = topic === "";
-        const topic_url = hash_util.by_stream_topic_url(stream_id, topic);
+        const topic_url = hash_util.by_channel_topic_permalink(stream_id, topic);
 
         // We hide the row according to filters or if it's muted.
         // We only supply the data to the topic rows and let jquery
@@ -710,6 +711,8 @@ function format_conversation(conversation_data: ConversationData): ConversationC
         const recipient_id = last_msg.recipient_id;
         const pm_url = last_msg.pm_with_url;
         const is_group = last_msg.display_recipient.length > 2;
+        const has_unread_mention =
+            unread.num_unread_mentions_for_user_ids_strings(user_ids_string) > 0;
 
         let is_bot = false;
         let user_circle_class;
@@ -742,6 +745,7 @@ function format_conversation(conversation_data: ConversationData): ConversationC
             is_group,
             is_bot,
             user_circle_class,
+            has_unread_mention,
         };
     }
 

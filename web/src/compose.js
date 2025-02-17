@@ -132,7 +132,9 @@ export function clear_compose_box() {
     compose_banner.clear_uploads();
     compose_ui.hide_compose_spinner();
     scheduled_messages.reset_selected_schedule_timestamp();
-    $(".compose_control_button_container:has(.add-poll)").removeClass("disabled-on-hover");
+    $(".compose_control_button_container:has(.needs-empty-compose)").removeClass(
+        "disabled-on-hover",
+    );
 }
 
 export function send_message_success(request, data) {
@@ -368,7 +370,11 @@ function schedule_message_to_custom_date() {
         clear_compose_box();
         const new_row_html = render_success_message_scheduled_banner({
             scheduled_message_id: data.scheduled_message_id,
+            minimum_scheduled_message_delay_minutes:
+                scheduled_messages.MINIMUM_SCHEDULED_MESSAGE_DELAY_SECONDS / 60,
             deliver_at,
+            minimum_scheduled_message_delay_minutes_note:
+                scheduled_messages.show_minimum_scheduled_message_delay_minutes_note,
         });
         compose_banner.clear_message_sent_banners();
         compose_banner.append_compose_banner_to_banner_list($(new_row_html), $banner_container);
@@ -394,4 +400,8 @@ function schedule_message_to_custom_date() {
         success,
         error,
     });
+}
+
+export function is_topic_input_focused() {
+    return $("#stream_message_recipient_topic").is(":focus");
 }

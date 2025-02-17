@@ -42,6 +42,8 @@ import * as submessage from "./submessage.ts";
 import {is_same_day} from "./time_zone_util.ts";
 import * as timerender from "./timerender.ts";
 import type {TopicLink} from "./types.ts";
+import * as typing_data from "./typing_data.ts";
+import * as typing_events from "./typing_events.ts";
 import * as user_topics from "./user_topics.ts";
 import type {AllVisibilityPolicies} from "./user_topics.ts";
 import * as util from "./util.ts";
@@ -190,7 +192,7 @@ function analyze_edit_history(
                 moved = true;
             }
 
-            if (edit_history_event.prev_topic) {
+            if (edit_history_event.prev_topic !== undefined) {
                 // TODO: Possibly this assert could be removed if we tightened the type
                 // on edit history elements such that a `prev_topic` being present means a
                 // `topic` element is.
@@ -669,6 +671,15 @@ export class MessageListView {
         moved: boolean;
         modified: boolean;
     } {
+        const is_typing = typing_data.is_message_editing(message.id);
+        if (is_typing) {
+            // Ensure the typing animation is rendered when a user switches
+            // to a view where someone is editing a message.
+            setTimeout(() => {
+                typing_events.render_message_editing_typing(message.id, true);
+            }, 0);
+        }
+
         /*
             If the message needs to be hidden because the sender was muted, we do
             a few things:

@@ -46,12 +46,7 @@ from zerver.lib.user_groups import (
 )
 from zerver.lib.validator import check_capped_url, check_string
 from zerver.models import Realm, RealmReactivationStatus, RealmUserDefault, UserProfile
-from zerver.models.realms import (
-    BotCreationPolicyEnum,
-    DigestWeekdayEnum,
-    OrgTypeEnum,
-    WildcardMentionPolicyEnum,
-)
+from zerver.models.realms import DigestWeekdayEnum, OrgTypeEnum
 from zerver.views.user_settings import (
     check_information_density_setting_values,
     check_settings_values,
@@ -131,18 +126,20 @@ def update_realm(
     send_welcome_emails: Json[bool] | None = None,
     digest_emails_enabled: Json[bool] | None = None,
     message_content_allowed_in_email_notifications: Json[bool] | None = None,
-    bot_creation_policy: Json[BotCreationPolicyEnum] | None = None,
+    can_create_bots_group: Json[GroupSettingChangeRequest] | None = None,
     can_create_groups: Json[GroupSettingChangeRequest] | None = None,
     can_create_public_channel_group: Json[GroupSettingChangeRequest] | None = None,
     can_create_private_channel_group: Json[GroupSettingChangeRequest] | None = None,
     can_create_web_public_channel_group: Json[GroupSettingChangeRequest] | None = None,
+    can_create_write_only_bots_group: Json[GroupSettingChangeRequest] | None = None,
     can_invite_users_group: Json[GroupSettingChangeRequest] | None = None,
     can_manage_all_groups: Json[GroupSettingChangeRequest] | None = None,
+    can_mention_many_users_group: Json[GroupSettingChangeRequest] | None = None,
     can_move_messages_between_channels_group: Json[GroupSettingChangeRequest] | None = None,
     can_move_messages_between_topics_group: Json[GroupSettingChangeRequest] | None = None,
+    can_summarize_topics_group: Json[GroupSettingChangeRequest] | None = None,
     direct_message_initiator_group: Json[GroupSettingChangeRequest] | None = None,
     direct_message_permission_group: Json[GroupSettingChangeRequest] | None = None,
-    wildcard_mention_policy: Json[WildcardMentionPolicyEnum] | None = None,
     video_chat_provider: Json[int] | None = None,
     jitsi_server_url_raw: Annotated[
         Json[str] | None,
@@ -167,6 +164,7 @@ def update_realm(
         Json[int | str] | None,
         ApiParamConfig("move_messages_between_streams_limit_seconds"),
     ] = None,
+    enable_guest_user_dm_warning: Json[bool] | None = None,
     enable_guest_user_indicator: Json[bool] | None = None,
     can_access_all_users_group: Json[GroupSettingChangeRequest] | None = None,
 ) -> HttpResponse:
@@ -192,7 +190,7 @@ def update_realm(
             raise JsonableError(_("At least one authentication method must be enabled."))
 
     if video_chat_provider is not None and video_chat_provider not in {
-        p["id"] for p in Realm.VIDEO_CHAT_PROVIDERS.values()
+        p["id"] for p in realm.get_enabled_video_chat_providers().values()
     }:
         raise JsonableError(
             _("Invalid video_chat_provider {video_chat_provider}").format(
@@ -361,12 +359,10 @@ def update_realm(
             continue
 
         setting_value = req_group_setting_vars[setting_name]
-        new_setting_value = parse_group_setting_value(setting_value.new, setting_name)
+        new_setting_value = parse_group_setting_value(setting_value.new)
 
         if setting_value.old is not None:
-            expected_current_setting_value = parse_group_setting_value(
-                setting_value.old, setting_name
-            )
+            expected_current_setting_value = parse_group_setting_value(setting_value.old)
 
         current_value = getattr(realm, setting_name)
         current_setting_api_value = get_group_setting_value_for_api(current_value)
@@ -409,7 +405,7 @@ def update_realm(
         new_moderation_request_channel_id = None
         if moderation_request_channel_id >= 0:
             (new_moderation_request_channel_id, sub) = access_stream_by_id(
-                user_profile, moderation_request_channel_id, allow_realm_admin=True
+                user_profile, moderation_request_channel_id, require_content_access=False
             )
         do_set_realm_moderation_request_channel(
             realm,
@@ -426,7 +422,9 @@ def update_realm(
         new_stream_announcements_stream_new = None
         if new_stream_announcements_stream_id >= 0:
             (new_stream_announcements_stream_new, sub) = access_stream_by_id(
-                user_profile, new_stream_announcements_stream_id, allow_realm_admin=True
+                user_profile,
+                new_stream_announcements_stream_id,
+                require_content_access=False,
             )
         do_set_realm_new_stream_announcements_stream(
             realm,
@@ -443,7 +441,7 @@ def update_realm(
         new_signup_announcements_stream = None
         if signup_announcements_stream_id >= 0:
             (new_signup_announcements_stream, sub) = access_stream_by_id(
-                user_profile, signup_announcements_stream_id, allow_realm_admin=True
+                user_profile, signup_announcements_stream_id, require_content_access=False
             )
         do_set_realm_signup_announcements_stream(
             realm,
@@ -460,7 +458,9 @@ def update_realm(
         new_zulip_update_announcements_stream = None
         if zulip_update_announcements_stream_id >= 0:
             (new_zulip_update_announcements_stream, sub) = access_stream_by_id(
-                user_profile, zulip_update_announcements_stream_id, allow_realm_admin=True
+                user_profile,
+                zulip_update_announcements_stream_id,
+                require_content_access=False,
             )
         do_set_realm_zulip_update_announcements_stream(
             realm,
@@ -674,6 +674,7 @@ def update_realm_user_settings_defaults(
     | None = None,
     web_navigate_to_sent_message: Json[bool] | None = None,
     web_suggest_update_timezone: Json[bool] | None = None,
+    hide_ai_features: Json[bool] | None = None,
 ) -> HttpResponse:
     if notification_sound is not None or email_notifications_batching_period_seconds is not None:
         check_settings_values(notification_sound, email_notifications_batching_period_seconds)

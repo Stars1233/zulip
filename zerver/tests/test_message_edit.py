@@ -23,7 +23,7 @@ from zerver.lib.utils import assert_is_not_none
 from zerver.models import Attachment, Message, NamedUserGroup, Realm, UserProfile, UserTopic
 from zerver.models.groups import SystemGroups
 from zerver.models.messages import UserMessage
-from zerver.models.realms import WildcardMentionPolicyEnum, get_realm
+from zerver.models.realms import get_realm
 from zerver.models.streams import get_stream
 
 
@@ -396,8 +396,23 @@ class EditMessageTest(ZulipTestCase):
 
     def test_edit_message_no_content(self) -> None:
         self.login("hamlet")
+        # Check message edit in stream for no content.
         msg_id = self.send_stream_message(
             self.example_user("hamlet"), "Denmark", topic_name="editing", content="before edit"
+        )
+        result = self.client_patch(
+            f"/json/messages/{msg_id}",
+            {
+                "content": " ",
+            },
+        )
+        self.assert_json_success(result)
+        content = Message.objects.filter(id=msg_id).values_list("content", flat=True)[0]
+        self.assertEqual(content, "(deleted)")
+
+        # Check message edit in DMs for no content.
+        msg_id = self.send_personal_message(
+            from_user=self.example_user("hamlet"), to_user=self.example_user("cordelia")
         )
         result = self.client_patch(
             f"/json/messages/{msg_id}",
@@ -1412,10 +1427,15 @@ class EditMessageTest(ZulipTestCase):
         message_id = self.send_stream_message(cordelia, stream_name, "Hello everyone")
 
         realm = cordelia.realm
-        do_set_realm_property(
+
+        moderators_system_group = NamedUserGroup.objects.get(
+            name=SystemGroups.MODERATORS, realm=realm, is_system_group=True
+        )
+
+        do_change_realm_permission_group_setting(
             realm,
-            "wildcard_mention_policy",
-            WildcardMentionPolicyEnum.MODERATORS,
+            "can_mention_many_users_group",
+            moderators_system_group,
             acting_user=None,
         )
 
@@ -1520,10 +1540,15 @@ class EditMessageTest(ZulipTestCase):
         message_id = self.send_stream_message(cordelia, stream_name, "Hello everyone")
 
         realm = cordelia.realm
-        do_set_realm_property(
+
+        moderators_system_group = NamedUserGroup.objects.get(
+            name=SystemGroups.MODERATORS, realm=realm, is_system_group=True
+        )
+
+        do_change_realm_permission_group_setting(
             realm,
-            "wildcard_mention_policy",
-            WildcardMentionPolicyEnum.MODERATORS,
+            "can_mention_many_users_group",
+            moderators_system_group,
             acting_user=None,
         )
 

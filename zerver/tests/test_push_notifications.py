@@ -75,7 +75,7 @@ from zerver.lib.remote_server import (
     PushNotificationBouncerServerError,
     build_analytics_data,
     get_realms_info_for_push_bouncer,
-    prepare_for_registration_takeover_challenge,
+    prepare_for_registration_transfer_challenge,
     record_push_notifications_recently_working,
     redis_client,
     send_server_data_to_push_bouncer,
@@ -111,7 +111,7 @@ from zerver.models.scheduled_jobs import NotificationTriggers
 from zerver.models.streams import get_stream
 from zilencer.auth import (
     REMOTE_SERVER_TAKEOVER_TOKEN_VALIDITY_SECONDS,
-    generate_registration_takeover_verification_secret,
+    generate_registration_transfer_verification_secret,
 )
 from zilencer.lib.remote_counts import MissingDataError
 from zilencer.models import RemoteZulipServerAuditLog
@@ -4195,13 +4195,21 @@ class TestGetAPNsPayload(PushNotificationTest):
         self.assertDictEqual(payload, expected)
         mock_push_notifications.assert_called()
 
-    def _test_get_message_payload_apns_stream_message(self, trigger: str) -> None:
+    def _test_get_message_payload_apns_stream_message(
+        self, trigger: str, empty_string_topic: bool = False
+    ) -> None:
         stream = Stream.objects.filter(name="Verona").get()
         message = self.get_message(Recipient.STREAM, stream.id, stream.realm_id)
+        topic_display_name = message.topic_name()
+        if empty_string_topic:
+            message.set_topic_name("")
+            message.save()
+            topic_display_name = Message.EMPTY_TOPIC_FALLBACK_NAME
+
         payload = get_message_payload_apns(self.sender, message, trigger)
         expected = {
             "alert": {
-                "title": "#Verona > Test topic",
+                "title": f"#Verona > {topic_display_name}",
                 "subtitle": "King Hamlet:",
                 "body": message.content,
             },
@@ -4215,7 +4223,7 @@ class TestGetAPNsPayload(PushNotificationTest):
                     "sender_id": self.sender.id,
                     "stream": stream.name,
                     "stream_id": stream.id,
-                    "topic": message.topic_name(),
+                    "topic": topic_display_name,
                     "server": settings.EXTERNAL_HOST,
                     "realm_id": self.sender.realm.id,
                     "realm_name": self.sender.realm.name,
@@ -4233,6 +4241,11 @@ class TestGetAPNsPayload(PushNotificationTest):
 
     def test_get_message_payload_apns_followed_topic_message(self) -> None:
         self._test_get_message_payload_apns_stream_message(NotificationTriggers.FOLLOWED_TOPIC_PUSH)
+
+    def test_get_message_payload_apns_empty_string_topic(self) -> None:
+        self._test_get_message_payload_apns_stream_message(
+            NotificationTriggers.STREAM_PUSH, empty_string_topic=True
+        )
 
     def test_get_message_payload_apns_stream_mention(self) -> None:
         user_profile = self.example_user("othello")
@@ -4468,15 +4481,23 @@ class TestGetGCMPayload(PushNotificationTest):
         truncate_content: bool = False,
         mentioned_user_group_id: int | None = None,
         mentioned_user_group_name: str | None = None,
+        empty_string_topic: bool = False,
     ) -> None:
         stream = Stream.objects.filter(name="Verona").get()
         message = self.get_message(Recipient.STREAM, stream.id, stream.realm_id)
+
         content = message.content
         if truncate_content:
             message.content = "a" * 210
             message.rendered_content = "a" * 210
             message.save()
             content = "a" * 200 + "…"
+
+        topic_display_name = message.topic_name()
+        if empty_string_topic:
+            message.set_topic_name("")
+            message.save()
+            topic_display_name = Message.EMPTY_TOPIC_FALLBACK_NAME
 
         hamlet = self.example_user("hamlet")
         payload, gcm_options = get_message_payload_gcm(
@@ -4501,7 +4522,7 @@ class TestGetGCMPayload(PushNotificationTest):
             "recipient_type": "stream",
             "stream": stream.name,
             "stream_id": stream.id,
-            "topic": message.topic_name(),
+            "topic": topic_display_name,
         }
 
         if mentioned_user_group_id is not None:
@@ -4531,6 +4552,9 @@ class TestGetGCMPayload(PushNotificationTest):
             mentioned_user_group_id=3,
             mentioned_user_group_name="mobile_team",
         )
+
+    def test_get_message_payload_gcm_empty_string_topic(self) -> None:
+        self._test_get_message_payload_gcm_stream_message(empty_string_topic=True)
 
     def test_get_message_payload_gcm_direct_message(self) -> None:
         message = self.get_message(
@@ -5359,13 +5383,8 @@ class PushBouncerSignupTest(ZulipTestCase):
             contact_email="server-admin@zulip.com",
         )
         result = self.client_post("/api/v1/remotes/server/register", request)
-        self.assert_json_error(
-            result,
-            "A server with hostname example.com already exists. "
-            "If you control the hostname "
-            "and want to transfer the registration to this server, you can run manage.py register_server "
-            "with the --registration-takeover flag.",
-        )
+        self.assert_json_error(result, "A server with hostname example.com already exists")
+        self.assertEqual(result.json()["code"], "HOSTNAME_ALREADY_IN_USE_BOUNCER_ERROR")
 
     def test_register_contact_email_validation_rules(self) -> None:
         zulip_org_id = str(uuid.uuid4())
@@ -5433,13 +5452,13 @@ class RegistrationTakeoverFlowTest(ZulipTestCase):
         server = RemoteZulipServer.objects.get(uuid=self.zulip_org_id)
 
         result = self.client_post(
-            "/api/v1/remotes/server/register/takeover", {"hostname": self.hostname}
+            "/api/v1/remotes/server/register/transfer", {"hostname": self.hostname}
         )
         self.assert_json_success(result)
         data = result.json()
         verification_secret = data["verification_secret"]
 
-        access_token = prepare_for_registration_takeover_challenge(verification_secret)
+        access_token = prepare_for_registration_transfer_challenge(verification_secret)
         # First we query the host's endpoint for serving the verification_secret.
         result = self.client_post(f"/api/v1/zulip-services/verify/{access_token}/")
         self.assert_json_success(result)
@@ -5469,7 +5488,7 @@ class RegistrationTakeoverFlowTest(ZulipTestCase):
         self.assertNotEqual(new_key, self.zulip_org_key)
         self.assertEqual(
             mock_log.output,
-            ["INFO:zilencer.views:verify_registration_takeover:host:example.com|success"],
+            ["INFO:zilencer.views:verify_registration_transfer:host:example.com|success"],
         )
 
         # Verify the registration got updated accordingly.
@@ -5485,7 +5504,7 @@ class RegistrationTakeoverFlowTest(ZulipTestCase):
     @override_settings(
         RATE_LIMITING=True,
         ABSOLUTE_USAGE_LIMITS_BY_ENDPOINT={
-            "verify_registration_takeover_challenge_ack_endpoint": [(10, 2)]
+            "verify_registration_transfer_challenge_ack_endpoint": [(10, 2)]
         },
     )
     @responses.activate
@@ -5521,7 +5540,7 @@ class RegistrationTakeoverFlowTest(ZulipTestCase):
         self.assertEqual(
             mock_log.output,
             [
-                "WARNING:zilencer.views:Rate limit exceeded for verify_registration_takeover_challenge_ack_endpoint"
+                "WARNING:zilencer.views:Rate limit exceeded for verify_registration_transfer_challenge_ack_endpoint"
             ],
         )
 
@@ -5548,7 +5567,7 @@ class RegistrationTakeoverFlowTest(ZulipTestCase):
         self.assert_json_error(result, "The verification secret is malformed")
 
         with time_machine.travel(time_now, tick=False):
-            verification_secret = generate_registration_takeover_verification_secret(self.hostname)
+            verification_secret = generate_registration_transfer_verification_secret(self.hostname)
         responses.get(
             "https://example.com/api/v1/zulip-services/verify/sometoken/",
             json={"verification_secret": verification_secret},
@@ -5568,7 +5587,7 @@ class RegistrationTakeoverFlowTest(ZulipTestCase):
             time_machine.travel(time_now, tick=False),
             mock.patch("zilencer.auth.REMOTE_SERVER_TAKEOVER_TOKEN_SALT", "foo"),
         ):
-            verification_secret = generate_registration_takeover_verification_secret(self.hostname)
+            verification_secret = generate_registration_transfer_verification_secret(self.hostname)
         responses.get(
             "https://example.com/api/v1/zulip-services/verify/sometoken/",
             json={"verification_secret": verification_secret},
@@ -5582,7 +5601,7 @@ class RegistrationTakeoverFlowTest(ZulipTestCase):
 
         # Make sure a valid verification secret for one hostname does not work for another.
         with time_machine.travel(time_now, tick=False):
-            verification_secret = generate_registration_takeover_verification_secret(
+            verification_secret = generate_registration_transfer_verification_secret(
                 "different.example.com"
             )
             responses.get(
@@ -5616,7 +5635,7 @@ class RegistrationTakeoverFlowTest(ZulipTestCase):
         self.assertEqual(
             mock_log.output,
             [
-                "INFO:zilencer.views:verify_registration_takeover:host:example.com|secret_not_prepared"
+                "INFO:zilencer.views:verify_registration_transfer:host:example.com|secret_not_prepared"
             ],
         )
 
@@ -5633,7 +5652,7 @@ class RegistrationTakeoverFlowTest(ZulipTestCase):
             )
         self.assert_json_error(result, "Error response received from the host: 403")
         self.assertIn(
-            "verify_registration_takeover:host:example.com|exception:", mock_log.output[0]
+            "verify_registration_transfer:host:example.com|exception:", mock_log.output[0]
         )
 
         # SSLError:
@@ -5649,7 +5668,7 @@ class RegistrationTakeoverFlowTest(ZulipTestCase):
             )
         self.assert_json_error(result, "SSL error occurred while communicating with the host.")
         self.assertIn(
-            "verify_registration_takeover:host:example.com|exception:", mock_log.output[0]
+            "verify_registration_transfer:host:example.com|exception:", mock_log.output[0]
         )
 
         # ConnectionError:
@@ -5667,7 +5686,7 @@ class RegistrationTakeoverFlowTest(ZulipTestCase):
             result, "Connection error occurred while communicating with the host."
         )
         self.assertIn(
-            "verify_registration_takeover:host:example.com|exception:", mock_log.output[0]
+            "verify_registration_transfer:host:example.com|exception:", mock_log.output[0]
         )
 
         # Timeout:
@@ -5683,7 +5702,7 @@ class RegistrationTakeoverFlowTest(ZulipTestCase):
             )
         self.assert_json_error(result, "The request timed out while communicating with the host.")
         self.assertIn(
-            "verify_registration_takeover:host:example.com|exception:", mock_log.output[0]
+            "verify_registration_transfer:host:example.com|exception:", mock_log.output[0]
         )
 
         # Generic RequestException:
@@ -5699,12 +5718,12 @@ class RegistrationTakeoverFlowTest(ZulipTestCase):
             )
         self.assert_json_error(result, "An error occurred while communicating with the host.")
         self.assertIn(
-            "verify_registration_takeover:host:example.com|exception:", mock_log.output[0]
+            "verify_registration_transfer:host:example.com|exception:", mock_log.output[0]
         )
 
     def test_initiate_flow_for_unregistered_domain(self) -> None:
         result = self.client_post(
-            "/api/v1/remotes/server/register/takeover",
+            "/api/v1/remotes/server/register/transfer",
             {"hostname": "unregistered.example.com"},
         )
         self.assert_json_error(result, "unregistered.example.com not yet registered")
@@ -5715,7 +5734,7 @@ class RegistrationTakeoverFlowTest(ZulipTestCase):
         )
         self.assert_json_error(result, "Verification secret not prepared")
 
-        valid_access_token = prepare_for_registration_takeover_challenge(verification_secret="foo")
+        valid_access_token = prepare_for_registration_transfer_challenge(verification_secret="foo")
         result = self.client_get(
             f"/api/v1/zulip-services/verify/{valid_access_token}/",
         )
