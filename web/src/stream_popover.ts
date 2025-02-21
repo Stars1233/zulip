@@ -150,10 +150,10 @@ function build_stream_popover(opts: {elt: HTMLElement; stream_id: number}): void
 
                 // Admin can change any stream's name & description either stream is public or
                 // private, subscribed or unsubscribed.
-                const can_change_name_description = stream_data.can_edit_description(sub);
-                const can_change_stream_permissions = stream_data.can_change_permissions(sub);
+                const can_change_stream_permissions =
+                    stream_data.can_change_permissions_requiring_metadata_access(sub);
                 let stream_edit_hash = hash_util.channels_settings_edit_url(sub, "general");
-                if (!can_change_stream_permissions && !can_change_name_description) {
+                if (!can_change_stream_permissions) {
                     stream_edit_hash = hash_util.channels_settings_edit_url(sub, "personal");
                 }
                 browser_history.go_to_location(stream_edit_hash);
@@ -322,11 +322,12 @@ export async function build_move_topic_to_stream_popover(
     const current_stream_name = sub_store.get(current_stream_id)!.name;
     const stream = sub_store.get(current_stream_id);
     const topic_display_name = util.get_final_topic_display_name(topic_name);
+    const empty_string_topic_display_name = util.get_final_topic_display_name("");
     const is_empty_string_topic = topic_name === "";
     const args: {
         topic_name: string;
-        topic_display_name: string;
-        is_empty_string_topic: boolean;
+        empty_string_topic_display_name: string;
+        realm_mandatory_topics: boolean;
         current_stream_id: number;
         notify_new_thread: boolean;
         notify_old_thread: boolean;
@@ -335,16 +336,18 @@ export async function build_move_topic_to_stream_popover(
         disable_topic_input?: boolean;
         message_placement?: "first" | "intermediate" | "last";
         stream: sub_store.StreamSubscription | undefined;
+        max_topic_length: number;
     } = {
         topic_name,
-        topic_display_name,
-        is_empty_string_topic,
+        empty_string_topic_display_name,
+        realm_mandatory_topics: realm.realm_mandatory_topics,
         current_stream_id,
         stream,
         notify_new_thread: message_edit.notify_new_thread_default,
         notify_old_thread: message_edit.notify_old_thread_default,
         from_message_actions_popover: message !== undefined,
         only_topic_edit,
+        max_topic_length: realm.max_topic_length,
     };
 
     // When the modal is opened for moving the whole topic from left sidebar,

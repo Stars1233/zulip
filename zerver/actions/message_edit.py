@@ -53,6 +53,7 @@ from zerver.lib.streams import (
     access_stream_by_id_for_message,
     can_access_stream_history,
     check_stream_access_based_on_can_send_message_group,
+    notify_stream_is_recently_active_update,
 )
 from zerver.lib.string_validation import check_stream_topic
 from zerver.lib.timestamp import datetime_to_timestamp
@@ -86,7 +87,7 @@ from zerver.models import (
     UserTopic,
 )
 from zerver.models.streams import get_stream_by_id_in_realm
-from zerver.models.users import active_user_ids, get_system_bot
+from zerver.models.users import get_system_bot
 from zerver.tornado.django_api import send_event_on_commit
 
 
@@ -226,6 +227,7 @@ def maybe_send_resolve_topic_notifications(
             ),
             message_type=Message.MessageType.RESOLVE_TOPIC_NOTIFICATION,
             limit_unread_user_ids=affected_participant_ids,
+            acting_user=user_profile,
         )
 
     return resolved_topic_message_id, False
@@ -293,6 +295,7 @@ def send_message_moved_breadcrumbs(
                     user=user_mention,
                     changed_messages_count=changed_messages_count,
                 ),
+                acting_user=user_profile,
             )
 
     if old_thread_notification_string is not None:
@@ -307,6 +310,7 @@ def send_message_moved_breadcrumbs(
                     new_location=new_topic_link,
                     changed_messages_count=changed_messages_count,
                 ),
+                acting_user=user_profile,
             )
 
 
@@ -1262,16 +1266,6 @@ def build_message_edit_request(
     topic_name: str | None = None,
     content: str | None = None,
 ) -> StreamMessageEditRequest | DirectMessageEditRequest:
-    if not message.is_stream_message():
-        # We have already validated the code to have content
-        # as not None.
-        assert content is not None
-        return DirectMessageEditRequest(
-            content=content,
-            orig_content=message.content,
-            is_content_edited=True,
-        )
-
     is_content_edited = False
     new_content = message.content
     if content is not None:
@@ -1279,6 +1273,15 @@ def build_message_edit_request(
         if content.rstrip() == "":
             content = "(deleted)"
         new_content = normalize_body(content)
+
+    if not message.is_stream_message():
+        # We have already validated that at least one of content, topic, or stream
+        # must be modified, and for DMs, only the content can be edited.
+        return DirectMessageEditRequest(
+            content=new_content,
+            orig_content=message.content,
+            is_content_edited=True,
+        )
 
     is_topic_edited = False
     topic_resolved = False
@@ -1524,14 +1527,6 @@ def check_update_message(
         if is_stream_active != new_stream.is_recently_active:
             new_stream.is_recently_active = is_stream_active
             new_stream.save(update_fields=["is_recently_active"])
-            event = dict(
-                type="stream",
-                op="update",
-                property="is_recently_active",
-                value=is_stream_active,
-                stream_id=stream_id,
-                name=new_stream.name,
-            )
-            send_event_on_commit(user_profile.realm, event, active_user_ids(user_profile.realm_id))
+            notify_stream_is_recently_active_update(new_stream, is_stream_active)
 
     return updated_message_result
