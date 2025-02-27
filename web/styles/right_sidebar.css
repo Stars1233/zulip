@@ -80,7 +80,8 @@
         border-radius: 3px;
 
         & i {
-            font-size: 17px;
+            /* 17px at 16px em */
+            font-size: 1.0625em;
             /* Ensure the icon takes the same baseline
                as the rest of the row, for perfect
                vertical alignment with the username and
@@ -152,22 +153,39 @@
         place-self: center center;
         /* Tighten the line-height to match the icon's size... */
         line-height: 1;
-        /* ...which is approximately 11px at 16px/1em. */
-        font-size: 0.6875em;
+        /* ...which is approximately 8px at 15px/1em in Vlad's design. */
+        font-size: 0.5333em;
     }
 
     .user_sidebar_entry.with_avatar {
-        .user-profile-picture {
+        .user-profile-picture-container {
             /* Establish positioning context for user circle. */
             position: relative;
+            /* TODO: Express this as part of the grid on
+               .selectable_sidebar_block. */
+            margin-right: 11px;
+
+            &:not(:has(.user-circle-offline)) .user-profile-picture {
+                /* The over-avatar user circle width is 15.5px at 20px/1em;
+                   we adjust the border radius here to avoid any pixels
+                   from the avatar bleeding through. */
+                border-bottom-right-radius: 0.3875em; /* 7.75px at 20px/1em */
+            }
+        }
+
+        .user-profile-picture {
+            /* Push back on the margin-right usually allotted here;
+               we put it on .user-profile-picture-container instead,
+               so that user circles occupy the corner of the image. */
+            margin-right: 0;
         }
 
         .user-circle {
             position: absolute;
             /* 10px at 16px/1em */
             font-size: 0.625em;
-            bottom: -1px;
-            right: -1px;
+            bottom: -0.5px;
+            right: -0.5px;
             background-color: var(--color-background);
             /* A 1.5px border provides better results than
                a 1px border, especially at smaller font sizes. */
@@ -467,11 +485,12 @@
     grid-template-rows: var(--line-height-sidebar-row-prominent);
     grid-template-columns: minmax(0, 1fr) auto;
     align-items: center;
-    margin-bottom: 10px;
-    margin-left: var(--right-sidebar-heading-left-spacing);
+    padding-bottom: 10px;
+    padding-left: var(--right-sidebar-heading-left-spacing);
     /* The scrollbar doesn't extend this high, but we want the three-dot
        menus to line up. */
-    margin-right: var(--width-simplebar-scroll-hover);
+    padding-right: var(--width-simplebar-scroll-hover);
+    background-color: var(--color-background);
 
     #userlist-header-search {
         display: grid;

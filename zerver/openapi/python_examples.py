@@ -826,12 +826,6 @@ def get_user_groups(client: Client) -> int:
     return leadership_user_group["id"]
 
 
-def test_user_not_authorized_error(nonadmin_client: Client) -> None:
-    result = nonadmin_client.get_streams(include_all_active=True)
-    assert_error_response(result)
-    validate_against_openapi_schema(result, "/rest-error-handling", "post", "400")
-
-
 @openapi_test_function("/streams/{stream_id}/members:get")
 def get_subscribers(client: Client) -> None:
     user_ids = [11, 25]
@@ -1614,6 +1608,45 @@ def set_typing_status(client: Client) -> None:
     validate_against_openapi_schema(result, "/typing", "post", "200")
 
 
+@openapi_test_function("/message_edit_typing:post")
+def set_message_edit_typing_status(client: Client) -> None:
+    message = {"type": "stream", "to": "Verona", "topic": "test_topic", "content": "test content"}
+    response = client.send_message(message)
+    message_id = response["id"]
+    # {code_example|start}
+    # The user has started typing while editing a message
+    request = {
+        "op": "start",
+        "message_id": message_id,
+    }
+    result = client.call_endpoint(
+        "message_edit_typing",
+        method="POST",
+        request=request,
+    )
+    # {code_example|end}
+    assert_success_response(result)
+    validate_against_openapi_schema(result, "/message_edit_typing", "post", "200")
+
+    message = {"type": "stream", "to": "Verona", "topic": "test_topic", "content": "test content"}
+    response = client.send_message(message)
+    message_id = response["id"]
+    # {code_example|start}
+    # The user has stopped typing while editing a message.
+    request = {
+        "op": "stop",
+        "message_id": message_id,
+    }
+    result = client.call_endpoint(
+        "message_edit_typing",
+        method="POST",
+        request=request,
+    )
+    # {code_example|end}
+    assert_success_response(result)
+    validate_against_openapi_schema(result, "/message_edit_typing", "post", "200")
+
+
 @openapi_test_function("/realm/emoji/{emoji_name}:post")
 def upload_custom_emoji(client: Client) -> None:
     emoji_path = os.path.join(ZULIP_DIR, "zerver", "tests", "images", "img.jpg")
@@ -1761,6 +1794,7 @@ def test_invalid_stream_error(client: Client) -> None:
 def test_messages(client: Client, nonadmin_client: Client) -> None:
     render_message(client)
     message_id = send_message(client)
+    set_message_edit_typing_status(client)
     add_reaction(client, message_id)
     remove_reaction(client, message_id)
     update_message(client, message_id)
@@ -1841,7 +1875,6 @@ def test_streams(client: Client, nonadmin_client: Client) -> None:
     add_default_stream(client)
     remove_default_stream(client)
 
-    test_user_not_authorized_error(nonadmin_client)
     test_authorization_errors_fatal(client, nonadmin_client)
 
 
