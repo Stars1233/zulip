@@ -7,13 +7,13 @@ import render_right_sidebar from "../templates/right_sidebar.hbs";
 import {buddy_list} from "./buddy_list.ts";
 import * as channel from "./channel.ts";
 import * as compose_ui from "./compose_ui.ts";
-import {media_breakpoints_num} from "./css_variables.ts";
 import {reorder_left_sidebar_navigation_list} from "./left_sidebar_navigation_area.ts";
 import {localstorage} from "./localstorage.ts";
 import * as message_lists from "./message_lists.ts";
 import * as message_viewport from "./message_viewport.ts";
 import {page_params} from "./page_params.ts";
 import * as popover_menus from "./popover_menus.ts";
+import * as popovers from "./popovers.ts";
 import * as rendered_markdown from "./rendered_markdown.ts";
 import * as resize from "./resize.ts";
 import * as settings_config from "./settings_config.ts";
@@ -55,7 +55,7 @@ export function show_userlist_sidebar(): void {
         return;
     }
 
-    if (window.innerWidth >= media_breakpoints_num.xl) {
+    if (ui_util.matches_viewport_state("gte_xl_min")) {
         $("body").removeClass("hide-right-sidebar");
         fix_invite_user_button_flicker();
         return;
@@ -68,13 +68,29 @@ export function show_userlist_sidebar(): void {
 }
 
 export function show_streamlist_sidebar(): void {
-    $(".app-main .column-left").addClass("expanded");
+    // Left sidebar toggle icon is attached to middle column.
+    $(".app-main .column-left, #navbar-middle").addClass("expanded");
     resize.resize_stream_filters_container();
     left_sidebar_expanded_as_overlay = true;
 }
 
+// We use this to display left sidebar without setting
+// toggle status
+export function show_left_sidebar(): void {
+    if (
+        // Check if left column is a overlay and is not visible.
+        $("#streamlist-toggle").is(":visible") &&
+        !left_sidebar_expanded_as_overlay
+    ) {
+        popovers.hide_all();
+        show_streamlist_sidebar();
+    } else if (!left_sidebar_expanded_as_overlay) {
+        $("body").removeClass("hide-left-sidebar");
+    }
+}
+
 export function hide_streamlist_sidebar(): void {
-    $(".app-main .column-left").removeClass("expanded");
+    $(".app-main .column-left, #navbar-middle").removeClass("expanded");
     left_sidebar_expanded_as_overlay = false;
 }
 
@@ -129,7 +145,7 @@ export function initialize(): void {
         e.preventDefault();
         e.stopPropagation();
 
-        if (window.innerWidth >= media_breakpoints_num.xl) {
+        if (ui_util.matches_viewport_state("gte_xl_min")) {
             $("body").toggleClass("hide-right-sidebar");
             if (!$("body").hasClass("hide-right-sidebar")) {
                 fix_invite_user_button_flicker();
@@ -155,11 +171,11 @@ export function initialize(): void {
         e.preventDefault();
         e.stopPropagation();
 
-        if (window.innerWidth >= media_breakpoints_num.md) {
+        if (ui_util.matches_viewport_state("gte_md_min")) {
             $("body").toggleClass("hide-left-sidebar");
             if (
                 message_lists.current !== undefined &&
-                window.innerWidth <= media_breakpoints_num.xl
+                !ui_util.matches_viewport_state("gte_xl_min")
             ) {
                 // We expand the middle column width between md and xl breakpoints when the
                 // left sidebar is hidden. This can cause the pointer to move out of view.
@@ -206,6 +222,13 @@ export function initialize(): void {
             // Overrides for certain elements that should not close the sidebars.
             if ($elt.closest(".no-auto-hide-sidebar-overlays").length > 0) {
                 return;
+            }
+
+            if (
+                left_sidebar_expanded_as_overlay &&
+                $elt.closest(".auto-hide-left-sidebar-overlay").length > 0
+            ) {
+                hide_streamlist_sidebar();
             }
 
             if (

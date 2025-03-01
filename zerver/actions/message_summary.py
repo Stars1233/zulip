@@ -1,3 +1,4 @@
+import time
 from typing import Any
 
 import orjson
@@ -5,6 +6,7 @@ from django.conf import settings
 from django.utils.timezone import now as timezone_now
 
 from analytics.lib.counts import COUNT_STATS, do_increment_logging_stat
+from zerver.lib.markdown import markdown_convert
 from zerver.lib.message import messages_for_ids
 from zerver.lib.narrow import (
     LARGER_THAN_MAX_MESSAGE_ID,
@@ -13,19 +15,33 @@ from zerver.lib.narrow import (
     fetch_messages,
 )
 from zerver.models import UserProfile
+from zerver.models.realms import MessageEditHistoryVisibilityPolicyEnum
 
 # Maximum number of messages that can be summarized in a single request.
 MAX_MESSAGES_SUMMARIZED = 100
-# Price per token for input and output tokens.
-# These values are based on the pricing of the Bedrock API
-# for Llama 3.3 Instruct (70B).
-# https://aws.amazon.com/bedrock/pricing/
-# Unit: USD per 1 billion tokens.
-#
-# These values likely will want to be declared in configuration,
-# rather than here in the code.
-OUTPUT_COST_PER_GIGATOKEN = 720
-INPUT_COST_PER_GIGATOKEN = 720
+
+ai_time_start = 0.0
+ai_total_time = 0.0
+ai_total_requests = 0
+
+
+def get_ai_time() -> float:
+    return ai_total_time
+
+
+def ai_stats_start() -> None:
+    global ai_time_start
+    ai_time_start = time.time()
+
+
+def get_ai_requests() -> int:
+    return ai_total_requests
+
+
+def ai_stats_finish() -> None:
+    global ai_total_time, ai_total_requests
+    ai_total_requests += 1
+    ai_total_time += time.time() - ai_time_start
 
 
 def format_zulip_messages_for_model(zulip_messages: list[dict[str, Any]]) -> str:
@@ -105,7 +121,7 @@ def do_summarize_narrow(
         client_gravatar=True,
         allow_empty_topic_name=False,
         # Avoid fetching edit history, which won't be passed to the model.
-        allow_edit_history=False,
+        message_edit_history_visibility_policy=MessageEditHistoryVisibilityPolicyEnum.none.value,
         user_profile=user_profile,
         realm=user_profile.realm,
     )
@@ -135,7 +151,7 @@ def do_summarize_narrow(
         f"Succinctly summarize this conversation based only on the information provided, "
         f"in up to {max_summary_length} sentences, for someone who is familiar with the context. "
         f"Mention key conclusions and actions, if any. Refer to specific people as appropriate. "
-        f"Don't use an intro phrase."
+        f"Don't use an intro phrase. You can use Zulip's CommonMark based formatting."
     )
     messages = [
         make_message(intro, "system"),
@@ -143,6 +159,8 @@ def do_summarize_narrow(
         make_message(prompt),
     ]
 
+    # Stats for database queries are tracked separately.
+    ai_stats_start()
     # We import litellm here to avoid a DeprecationWarning.
     # See these issues for more info:
     # https://github.com/BerriAI/litellm/issues/6232
@@ -178,11 +196,19 @@ def do_summarize_narrow(
     input_tokens = response["usage"]["prompt_tokens"]
     output_tokens = response["usage"]["completion_tokens"]
 
-    credits_used = (output_tokens * OUTPUT_COST_PER_GIGATOKEN) + (
-        input_tokens * INPUT_COST_PER_GIGATOKEN
+    # Divide by 1 billion to get actual cost in USD.
+    credits_used = (output_tokens * settings.OUTPUT_COST_PER_GIGATOKEN) + (
+        input_tokens * settings.INPUT_COST_PER_GIGATOKEN
     )
+    ai_stats_finish()
+
     do_increment_logging_stat(
         user_profile, COUNT_STATS["ai_credit_usage::day"], None, timezone_now(), credits_used
     )
 
-    return response["choices"][0]["message"]["content"]
+    summary = response["choices"][0]["message"]["content"]
+    # TODO: This may want to fetch `MentionData`, in order to be able
+    # to process channel or user mentions that might be in the
+    # content. Requires a prompt that supports it.
+    rendered_summary = markdown_convert(summary, message_realm=user_profile.realm).rendered_content
+    return rendered_summary

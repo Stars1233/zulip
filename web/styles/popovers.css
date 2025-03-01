@@ -80,9 +80,7 @@
     border: 1px solid var(--color-border-popover-menu);
     border-radius: 6px;
     box-shadow: var(--box-shadow-popover-menu);
-    /* Popover menus should scale no smaller than 15px,
-       but scale up with the base font-size. */
-    font-size: max(15px, var(--base-font-size-px));
+    font-size: 1.0714em; /* 15px at 14px em */
 
     > .tippy-content {
         padding: 0;
@@ -177,7 +175,6 @@
         color: var(--color-text-item);
 
         &:hover {
-            color: var(--color-text-link);
             text-decoration: none;
         }
 
@@ -475,6 +472,7 @@ ul.popover-group-menu-member-list {
 
     .deactivated-user-icon {
         vertical-align: middle;
+        font-size: 0.7em;
     }
 
     #default-section {
@@ -590,6 +588,9 @@ ul.popover-group-menu-member-list {
             text-overflow: ellipsis;
             overflow: hidden;
             margin-bottom: 0;
+            /* Override default modal input width, since that overflows.
+               This is 185px (the default "width: unset" width) at 14px/em */
+            width: 13.2142em;
         }
 
         .group-search:placeholder-shown + #clear_groups_search,
@@ -887,9 +888,8 @@ ul.popover-group-menu-member-list {
     }
 
     #move_messages_count {
-        margin-top: -20px;
-        font-style: italic;
-        opacity: 0.7;
+        /* Disabled pending fixes to the logic. */
+        display: none;
     }
 
     .topic_stream_edit_header {
@@ -1012,6 +1012,12 @@ ul.popover-group-menu-member-list {
         background-color: var(--color-background-popover-menu);
         border: solid 1px var(--color-background-popover-menu);
         border-radius: 50%;
+
+        &.deactivated-user-icon {
+            font-size: 0.8em;
+            background-color: var(--color-background-popover-menu);
+            padding: 1px;
+        }
     }
 
     .popover-menu-user-info {
@@ -1028,7 +1034,6 @@ ul.popover-group-menu-member-list {
         line-height: 1.1111em;
         color: var(--color-text-full-name);
         overflow-wrap: anywhere;
-        user-select: text;
 
         .zulip-icon.zulip-icon-bot {
             vertical-align: middle;
