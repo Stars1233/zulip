@@ -13,7 +13,7 @@ from typing_extensions import override
 from zerver.lib.management import ZulipBaseCommand, check_config
 from zerver.lib.remote_server import (
     PushBouncerSession,
-    prepare_for_registration_takeover_challenge,
+    prepare_for_registration_transfer_challenge,
     send_json_to_push_bouncer,
     send_server_data_to_push_bouncer,
 )
@@ -30,7 +30,7 @@ class Command(ZulipBaseCommand):
     @override
     def add_arguments(self, parser: ArgumentParser) -> None:
         parser.add_argument(
-            "--agree_to_terms_of_service",
+            "--agree-to-terms-of-service",
             action="store_true",
             help="Agree to the Zulipchat Terms of Service: https://zulip.com/policies/terms.",
         )
@@ -41,9 +41,14 @@ class Command(ZulipBaseCommand):
             help="Automatically rotate your server's zulip_org_key",
         )
         action.add_argument(
-            "--registration-takeover",
+            "--registration-transfer",
             action="store_true",
-            help="Overwrite pre-existing registration for the hostname",
+            help="""\
+If your server uses a publicly verifiable SSL certificate for a
+hostname that is already registered for Zulip services, transfers the
+registration to this server by changing the zulip_org_key secret for
+that registration and saving the updated secret in
+/etc/zulip/zulip-secrets.conf.""",
         )
         action.add_argument(
             "--deactivate",
@@ -96,7 +101,7 @@ class Command(ZulipBaseCommand):
             f"* This server's configured hostname: {request['hostname']}\n"
             f"* This server's configured contact email address: {request['contact_email']}\n"
             "* Metadata about each organization hosted by the server; see:\n\n"
-            "    <https://zulip.readthedocs.io/en/latest/production/mobile-push-notifications.html#uploading-basic-metadata>\n\n"
+            "    <https://zulip.com/doc-permalinks/basic-metadata>\n\n"
             "Use of this service is governed by the Zulip Terms of Service:\n\n"
             "    <https://zulip.com/policies/terms>\n"
         )
@@ -114,8 +119,8 @@ class Command(ZulipBaseCommand):
                 # enough about what happened.
                 return
 
-        if options["registration_takeover"]:
-            org_id, org_key = self.do_registration_takeover_flow(hostname)
+        if options["registration_transfer"]:
+            org_id, org_key = self.do_registration_transfer_flow(hostname)
             # We still want to proceed with a regular request to the registration endpoint,
             # as it'll update the registration with new information such as the contact email.
             request["zulip_org_id"] = org_id
@@ -129,7 +134,7 @@ class Command(ZulipBaseCommand):
             "/api/v1/remotes/server/register", request
         )
 
-        send_server_data_to_push_bouncer(consider_usage_statistics=False)
+        send_server_data_to_push_bouncer(consider_usage_statistics=False, raise_on_error=True)
 
         if response.json()["created"]:
             print(
@@ -154,24 +159,24 @@ class Command(ZulipBaseCommand):
                 )
             print("Mobile Push Notification Service registration successfully updated!")
 
-        if options["registration_takeover"]:
+        if options["registration_transfer"]:
             print()
             print(
                 "Make sure to restart the server next by running /home/zulip/deployments/current/scripts/restart-server "
                 "so that the new credentials are reloaded."
             )
 
-    def do_registration_takeover_flow(self, hostname: str) -> tuple[str, str]:
+    def do_registration_transfer_flow(self, hostname: str) -> tuple[str, str]:
         params = {"hostname": hostname}
         response = self._request_push_notification_bouncer_url(
-            "/api/v1/remotes/server/register/takeover", params
+            "/api/v1/remotes/server/register/transfer", params
         )
         verification_secret = response.json()["verification_secret"]
 
         print(
             "Received a verification secret from the service. Preparing to serve it at the verification URL."
         )
-        token_for_push_bouncer = prepare_for_registration_takeover_challenge(verification_secret)
+        token_for_push_bouncer = prepare_for_registration_transfer_challenge(verification_secret)
 
         print("Sending ACK to the service and awaiting completion of verification...")
         response = self._request_push_notification_bouncer_url(
@@ -227,6 +232,23 @@ class Command(ZulipBaseCommand):
                 content_dict = response.json()
             except Exception:
                 raise e
+
+            if (
+                "code" in content_dict
+                and content_dict["code"] == "HOSTNAME_ALREADY_IN_USE_BOUNCER_ERROR"
+            ):
+                print(
+                    "--------------------------------\n"
+                    "The hostname is already in use by another server. If you control the hostname \n"
+                    "and want to transfer the registration to this server, you can run manage.py register_server \n"
+                    "with the --registration-transfer flag.\n"
+                    "Note that this will invalidate old credentials if another server is still using them.\n"
+                    "\n"
+                    "For more information, see: \n"
+                    "\n"
+                    "<https://zulip.com/doc-permalinks/registration-transfer>"
+                )
+                raise CommandError
 
             error_message = content_dict["msg"]
             raise CommandError(

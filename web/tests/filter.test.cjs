@@ -487,6 +487,19 @@ test("basics", () => {
     assert.ok(!filter.is_personal_filter());
     assert.ok(filter.is_conversation_view());
     assert.ok(!filter.is_conversation_view_with_near());
+
+    terms = [
+        {operator: "channel", operand: "foo", negated: false},
+        {operator: "topic", operand: "bar", negated: false},
+    ];
+    filter = new Filter(terms);
+
+    assert.equal(filter.has_exactly_channel_topic_operators(), true);
+
+    filter.adjust_with_operand_to_message(12);
+
+    assert.deepEqual(filter.terms(), [...terms, {operator: "with", operand: "12"}]);
+    assert.equal(filter.has_exactly_channel_topic_operators(), false);
 });
 
 function assert_not_mark_read_with_has_operands(additional_terms_to_test) {
@@ -1550,11 +1563,16 @@ test("describe", ({mock_template, override}) => {
     assert.equal(Filter.search_description_as_html(narrow, false), string);
 
     narrow = [{operator: "is", operand: "resolved"}];
-    string = "topics marked as resolved";
+    string = "resolved topics";
     assert.equal(Filter.search_description_as_html(narrow, false), string);
 
     narrow = [{operator: "is", operand: "followed"}];
     string = "followed topics";
+    assert.equal(Filter.search_description_as_html(narrow, false), string);
+
+    // operands with their own negative words, like resolved.
+    narrow = [{operator: "is", operand: "resolved", negated: true}];
+    string = "unresolved topics";
     assert.equal(Filter.search_description_as_html(narrow, false), string);
 
     narrow = [{operator: "is", operand: "something_we_do_not_support"}];
@@ -2238,7 +2256,7 @@ test("navbar_helpers", ({override}) => {
             terms: is_resolved,
             is_common_narrow: true,
             icon: "check",
-            title: "translated: Topics marked as resolved",
+            title: "translated: Resolved topics",
             redirect_url_with_search: "/#narrow/topics/is/resolved",
         },
         {
@@ -2501,6 +2519,10 @@ test("error_cases", () => {
 run_test("is_spectator_compatible", () => {
     // tests same as test_is_spectator_compatible from test_message_fetch.py
     assert.ok(Filter.is_spectator_compatible([]));
+    assert.ok(Filter.is_spectator_compatible([{operator: "is", operand: "resolved"}]));
+    assert.ok(
+        Filter.is_spectator_compatible([{operator: "is", operand: "resolved", negated: true}]),
+    );
     assert.ok(Filter.is_spectator_compatible([{operator: "has", operand: "attachment"}]));
     assert.ok(Filter.is_spectator_compatible([{operator: "has", operand: "image"}]));
     assert.ok(Filter.is_spectator_compatible([{operator: "search", operand: "magic"}]));

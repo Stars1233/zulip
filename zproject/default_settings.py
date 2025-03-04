@@ -119,6 +119,7 @@ SOCIAL_AUTH_SYNC_ATTRS_DICT: dict[str, dict[str, dict[str, str]]] = {}
 SSO_APPEND_DOMAIN: str | None = None
 CUSTOM_HOME_NOT_LOGGED_IN: str | None = None
 
+VIDEO_ZOOM_SERVER_TO_SERVER_ACCOUNT_ID = get_secret("video_zoom_account_id", development_only=True)
 VIDEO_ZOOM_CLIENT_ID = get_secret("video_zoom_client_id", development_only=True)
 VIDEO_ZOOM_CLIENT_SECRET = get_secret("video_zoom_client_secret")
 
@@ -215,6 +216,8 @@ POLICIES_DIRECTORY: str = "zerver/policies_absent"
 # Security
 ENABLE_FILE_LINKS = False
 ENABLE_GRAVATAR = True
+## Overrides the above setting for individual realms, by integer ID.
+GRAVATAR_REALM_OVERRIDE: dict[int, bool] = {}
 INLINE_IMAGE_PREVIEW = True
 INLINE_URL_EMBED_PREVIEW = True
 NAME_CHANGES_DISABLED = False
@@ -343,7 +346,7 @@ RATE_LIMITING_RULES: dict[str, list[tuple[int, int]]] = {}
 # only, so we don't need a nice overriding system for them like we do
 # for RATE_LIMITING_RULES.
 ABSOLUTE_USAGE_LIMITS_BY_ENDPOINT = {
-    "verify_registration_takeover_challenge_ack_endpoint": [
+    "verify_registration_transfer_challenge_ack_endpoint": [
         # 30 requests per day
         (86400, 30),
     ],
@@ -699,7 +702,9 @@ MAX_DEACTIVATED_REALM_DELETION_DAYS: int | None = None
 
 
 TOPIC_SUMMARIZATION_MODEL: str | None = None
-if not PRODUCTION:
-    TOPIC_SUMMARIZATION_MODEL = "huggingface/meta-llama/Meta-Llama-3-8B-Instruct"
-
 TOPIC_SUMMARIZATION_PARAMETERS: dict[str, object] = {}
+# Price per token for input and output tokens, and maximum cost. Units
+# are arbitrarily, but typically will be USD.
+INPUT_COST_PER_GIGATOKEN: int = 0
+OUTPUT_COST_PER_GIGATOKEN: int = 0
+MAX_PER_USER_MONTHLY_AI_COST: float | None = 0.5
