@@ -51,6 +51,7 @@ type DirectMessageContext = {
     is_collapsed: boolean;
     latest_msg_id: number;
     column_indexes: typeof COLUMNS;
+    has_unread_mention: boolean;
 };
 
 const direct_message_context_properties: (keyof DirectMessageContext)[] = [
@@ -109,6 +110,7 @@ const stream_context_properties: (keyof StreamContext)[] = [
 type TopicContext = {
     is_topic: boolean;
     stream_id: number;
+    stream_archived: boolean;
     topic_name: string;
     topic_display_name: string;
     is_empty_string_topic: boolean;
@@ -127,6 +129,7 @@ type TopicContext = {
 const topic_context_properties: (keyof TopicContext)[] = [
     "is_topic",
     "stream_id",
+    "stream_archived",
     "topic_name",
     "topic_display_name",
     "is_empty_string_topic",
@@ -297,14 +300,19 @@ function format_dm(
     let user_circle_class: string | false | undefined;
     let is_bot = false;
     if (recipient_ids.length === 1 && recipient_ids[0] !== undefined) {
-        is_bot = people.get_by_user_id(recipient_ids[0]).is_bot;
-        user_circle_class = is_bot ? false : buddy_data.get_user_circle_class(recipient_ids[0]);
+        const user_id = recipient_ids[0];
+        const is_deactivated = !people.is_active_user_for_popover(user_id);
+        is_bot = people.get_by_user_id(user_id).is_bot;
+        user_circle_class = is_bot
+            ? false
+            : buddy_data.get_user_circle_class(recipient_ids[0], is_deactivated);
     }
+    const has_unread_mention = unread.num_unread_mentions_for_user_ids_strings(user_ids_string) > 0;
 
     const context = {
         conversation_key: user_ids_string,
         is_direct: true,
-        rendered_dm_with: util.format_array_as_list(rendered_dm_with, "long", "conjunction"),
+        rendered_dm_with: util.format_array_as_list_with_conjuction(rendered_dm_with, "long"),
         is_group: recipient_ids.length > 1,
         user_circle_class,
         is_bot,
@@ -315,6 +323,7 @@ function format_dm(
         is_collapsed: collapsed_containers.has("inbox-dm-header"),
         latest_msg_id,
         column_indexes: COLUMNS,
+        has_unread_mention,
     };
 
     return context;
@@ -402,11 +411,18 @@ function update_stream_data(
 ): void {
     const stream_topics_data = new Map<string, TopicContext>();
     const stream_data = format_stream(stream_id);
+    const stream_archived = stream_data.is_archived;
     let stream_post_filter_unread_count = 0;
     for (const [topic, {topic_count, latest_msg_id}] of topic_dict) {
         const topic_key = get_topic_key(stream_id, topic);
         if (topic_count) {
-            const topic_data = format_topic(stream_id, topic, topic_count, latest_msg_id);
+            const topic_data = format_topic(
+                stream_id,
+                stream_archived,
+                topic,
+                topic_count,
+                latest_msg_id,
+            );
             stream_topics_data.set(topic_key, topic_data);
             if (!topic_data.is_hidden) {
                 stream_post_filter_unread_count += topic_data.unread_count;
@@ -434,6 +450,7 @@ function rerender_stream_inbox_header_if_needed(
 
 function format_topic(
     stream_id: number,
+    stream_archived: boolean,
     topic: string,
     topic_unread_count: number,
     latest_msg_id: number,
@@ -441,12 +458,13 @@ function format_topic(
     const context = {
         is_topic: true,
         stream_id,
+        stream_archived,
         topic_name: topic,
         topic_display_name: util.get_final_topic_display_name(topic),
         is_empty_string_topic: topic === "",
         unread_count: topic_unread_count,
         conversation_key: get_topic_key(stream_id, topic),
-        topic_url: hash_util.by_stream_topic_url(stream_id, topic),
+        topic_url: hash_util.by_channel_topic_permalink(stream_id, topic),
         is_hidden: filter_should_hide_stream_row({stream_id, topic}),
         is_collapsed: collapsed_containers.has(STREAM_HEADER_PREFIX + stream_id),
         mention_in_unread: unread.topic_has_any_unread_mentions(stream_id, topic),
@@ -588,6 +606,7 @@ function reset_data(): {
     is_dms_collapsed: boolean;
     has_dms_post_filter: boolean;
     has_visible_unreads: boolean;
+    has_unread_mention: boolean;
 } {
     dms_dict = new Map();
     topics_dict = new Map();
@@ -596,6 +615,7 @@ function reset_data(): {
     const unread_dms = unread.get_unread_pm();
     const unread_dms_count = unread_dms.total_count;
     const unread_dms_dict = unread_dms.pm_dict;
+    const has_unread_mention = unread.num_unread_mentions_in_dms() > 0;
 
     const unread_stream_message = unread.get_unread_topics();
     const unread_stream_msg_count = unread_stream_message.stream_unread_messages;
@@ -637,6 +657,7 @@ function reset_data(): {
     const is_dms_collapsed = collapsed_containers.has("inbox-dm-header");
 
     return {
+        has_unread_mention,
         unread_dms_count,
         is_dms_collapsed,
         has_dms_post_filter,
@@ -736,7 +757,7 @@ function row_in_search_results(keyword: string, text: string): boolean {
 
 function filter_should_hide_dm_row({dm_key}: {dm_key: string}): boolean {
     const recipients_string = people.get_recipients(dm_key);
-    const text = recipients_string.toLowerCase();
+    const text = recipients_string.join(",").toLowerCase();
 
     if (!row_in_search_results(search_keyword, text)) {
         return true;
@@ -891,7 +912,11 @@ export function get_focused_row_message(): {message?: Message | undefined} & (
 
     const $all_rows = get_all_rows();
     const focused_row = $all_rows.get(row_focus);
-    assert(focused_row !== undefined);
+    if (!focused_row) {
+        // Likely `row_focus` or `current_focus_id` wasn't updated correctly.
+        // TODO: Debug this further.
+        return {message: undefined};
+    }
     const $focused_row = $(focused_row);
     if (is_row_a_header($focused_row)) {
         const is_dm_header = $focused_row.attr("id") === "inbox-dm-header";
@@ -1236,6 +1261,7 @@ export function update(): void {
     const unread_dms = unread.get_unread_pm();
     const unread_dms_count = unread_dms.total_count;
     const unread_dms_dict = unread_dms.pm_dict;
+    const has_unread_mention = unread.num_unread_mentions_in_dms() > 0;
 
     const unread_stream_message = unread.get_unread_topics();
     const unread_streams_dict = unread_stream_message.topic_counts;
@@ -1269,6 +1295,7 @@ export function update(): void {
     } else {
         $inbox_dm_header.removeClass("hidden_by_filters");
         $inbox_dm_header.find(".unread_count").text(unread_dms_count);
+        $inbox_dm_header.find(".unread_mention_info").toggleClass("hidden", !has_unread_mention);
     }
 
     let has_topics_post_filter = false;
@@ -1291,12 +1318,14 @@ export function update(): void {
 
             const topic_keys_to_insert: string[] = [];
             const new_stream_data = format_stream(stream_id);
+            const stream_archived = new_stream_data.is_archived;
             for (const [topic, {topic_count, latest_msg_id}] of topic_dict) {
                 const topic_key = get_topic_key(stream_id, topic);
                 if (topic_count) {
                     const old_topic_data = stream_topics_data.get(topic_key);
                     const new_topic_data = format_topic(
                         stream_id,
+                        stream_archived,
                         topic,
                         topic_count,
                         latest_msg_id,
@@ -1590,7 +1619,7 @@ export function initialize(): void {
         }
         const stream_id = Number($elt.attr("data-stream-id"));
         const topic = $elt.attr("data-topic-name");
-        if (topic) {
+        if (topic !== undefined) {
             unread_ops.mark_topic_as_read(stream_id, topic);
         } else {
             unread_ops.mark_stream_as_read(stream_id);

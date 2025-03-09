@@ -5,7 +5,9 @@
 # by a test in test_events.py with a schema checker here.
 #
 # See https://zulip.readthedocs.io/en/latest/subsystems/events-system.html
+import inspect
 from collections.abc import Callable
+from enum import Enum
 from pprint import PrettyPrinter
 from typing import cast
 
@@ -72,6 +74,10 @@ from zerver.lib.event_types import (
     EventSubscriptionPeerRemove,
     EventSubscriptionRemove,
     EventSubscriptionUpdate,
+    EventTypingEditChannelMessageStart,
+    EventTypingEditChannelMessageStop,
+    EventTypingEditDirectMessageStart,
+    EventTypingEditDirectMessageStop,
     EventTypingStart,
     EventTypingStop,
     EventUpdateDisplaySettings,
@@ -108,7 +114,7 @@ from zerver.lib.event_types import (
     PlanTypeData,
 )
 from zerver.lib.topic import ORIG_TOPIC, TOPIC_NAME
-from zerver.lib.types import AnonymousSettingGroupDict
+from zerver.lib.types import UserGroupMembersDict
 from zerver.models import Realm, RealmUserDefault, Stream, UserProfile
 
 
@@ -194,6 +200,10 @@ check_subscription_peer_remove = make_checker(EventSubscriptionPeerRemove)
 check_subscription_remove = make_checker(EventSubscriptionRemove)
 check_typing_start = make_checker(EventTypingStart)
 check_typing_stop = make_checker(EventTypingStop)
+check_typing_edit_channel_message_start = make_checker(EventTypingEditChannelMessageStart)
+check_typing_edit_direct_message_start = make_checker(EventTypingEditDirectMessageStart)
+check_typing_edit_channel_message_stop = make_checker(EventTypingEditChannelMessageStop)
+check_typing_edit_direct_message_stop = make_checker(EventTypingEditDirectMessageStop)
 check_update_message_flags_add = make_checker(EventUpdateMessageFlagsAdd)
 check_update_message_flags_remove = make_checker(EventUpdateMessageFlagsRemove)
 check_user_group_add = make_checker(EventUserGroupAdd)
@@ -418,7 +428,10 @@ def check_realm_update(
         return
 
     property_type = Realm.property_types[prop]
-    assert isinstance(value, property_type)
+    if inspect.isclass(property_type) and issubclass(property_type, Enum):
+        assert isinstance(value, str)
+    else:
+        assert isinstance(value, property_type)
 
 
 def check_realm_default_update(
@@ -522,7 +535,7 @@ def check_stream_update(
         assert value in Stream.STREAM_POST_POLICY_TYPES
     elif prop in Stream.stream_permission_group_settings:
         assert extra_keys == set()
-        assert isinstance(value, int | AnonymousSettingGroupDict)
+        assert isinstance(value, int | UserGroupMembersDict)
     elif prop == "first_message_id":
         assert extra_keys == set()
         assert isinstance(value, int)
@@ -677,12 +690,12 @@ def check_update_message(
     assert expected_keys == actual_keys
 
 
-def check_user_group_update(var_name: str, event: dict[str, object], field: str) -> None:
+def check_user_group_update(var_name: str, event: dict[str, object], fields: set[str]) -> None:
     _check_user_group_update(var_name, event)
 
     assert isinstance(event["data"], dict)
 
-    assert set(event["data"].keys()) == {field}
+    assert set(event["data"].keys()) == fields
 
 
 def check_user_status(var_name: str, event: dict[str, object], fields: set[str]) -> None:

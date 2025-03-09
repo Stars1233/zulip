@@ -49,7 +49,9 @@ export function initialize(): void {
             const button_type = $elem.attr("data-reply-button-type");
             switch (button_type) {
                 case "direct_disabled": {
-                    instance.setContent(pick_empty_narrow_banner().title);
+                    const narrow_filter = narrow_state.filter();
+                    assert(narrow_filter !== undefined);
+                    instance.setContent(pick_empty_narrow_banner(narrow_filter).title);
                     return;
                 }
                 case "stream_disabled": {
@@ -215,11 +217,18 @@ export function initialize(): void {
         trigger: "mouseenter",
         appendTo: () => document.body,
         onShow(instance) {
-            // Don't show Send button tooltip if the popover is displayed.
+            // Don't show send-area tooltips if the popover is displayed or if the send button is disabled.
             if (popover_menus.is_scheduled_messages_popover_displayed()) {
                 return false;
             }
-            if (user_settings.enter_sends) {
+
+            if ($(".message-send-controls").hasClass("disabled-message-send-controls")) {
+                instance.setContent(
+                    compose_recipient.get_posting_policy_error_message() ||
+                        compose_validate.get_disabled_send_tooltip(),
+                );
+                return undefined;
+            } else if (user_settings.enter_sends) {
                 instance.setContent(parse_html($("#send-enter-tooltip-template").html()));
             } else {
                 instance.setContent(parse_html($("#send-ctrl-enter-tooltip-template").html()));
@@ -261,21 +270,6 @@ export function initialize(): void {
 
             return parse_html(render_narrow_to_compose_recipients_tooltip({display_current_view}));
         },
-        onHidden(instance) {
-            instance.destroy();
-        },
-    });
-
-    tippy.delegate("body", {
-        // TODO: Might need to target just the Send button itself
-        // in the new design
-        target: ".disabled-message-send-controls",
-        // 350px at 14px/1em
-        maxWidth: "25em",
-        content: () =>
-            compose_recipient.get_posting_policy_error_message() ||
-            compose_validate.get_disabled_send_tooltip(),
-        appendTo: () => document.body,
         onHidden(instance) {
             instance.destroy();
         },

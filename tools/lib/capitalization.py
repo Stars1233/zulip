@@ -11,6 +11,7 @@ from bs4 import BeautifulSoup
 # this list without any modification.
 IGNORED_PHRASES = [
     # Proper nouns and acronyms
+    r"AI",
     r"API",
     r"APNS",
     r"Botserver",
@@ -177,8 +178,10 @@ IGNORED_PHRASES = [
     r"hours",
     r"days",
     r"weeks",
-    # Used in "Who can subscribe others to this channel" label.
-    r"must be subscribed",
+    # Used in "Who can subscribe to this channel" label.
+    r"everyone except guests can subscribe to any public channel",
+    # Used in branch-filtering label in the integration-url-modal.
+    r"comma-separated list",
 ]
 
 # Sort regexes in descending order of their lengths. As a result, the
