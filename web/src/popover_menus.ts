@@ -6,10 +6,11 @@ import $ from "jquery";
 import * as tippy from "tippy.js";
 
 import * as blueslip from "./blueslip.ts";
-import {media_breakpoints_num} from "./css_variables.ts";
+import * as message_viewport from "./message_viewport.ts";
 import * as modals from "./modals.ts";
 import * as overlays from "./overlays.ts";
 import * as popovers from "./popovers.ts";
+import * as ui_util from "./ui_util.ts";
 import * as util from "./util.ts";
 
 type PopoverName =
@@ -335,7 +336,10 @@ function get_props_for_popover_centering(
     return {
         arrow: false,
         getReferenceClientRect: () => new DOMRect(0, 0, 0, 0),
-        placement: "top",
+        // Since we are resetting the reference to (0,0) in DOM the placement here doesn't matter
+        // Using "bottom" placement as it works well with Popper's positioning system
+        // when the popover exceeds window height
+        placement: "bottom",
         popperOptions: {
             modifiers: [
                 {
@@ -399,7 +403,12 @@ function get_props_for_popover_centering(
 export function toggle_popover_menu(
     target: tippy.ReferenceElement,
     popover_props: Partial<tippy.Props>,
-    options?: {show_as_overlay_on_mobile: boolean; show_as_overlay_always: boolean},
+    options?: {
+        show_as_overlay_on_mobile: boolean;
+        show_as_overlay_always: boolean;
+        // Only works for elements which are in message feed.
+        message_feed_overlay_detection?: boolean;
+    },
 ): tippy.Instance {
     const instance = target._tippy;
     if (instance) {
@@ -411,11 +420,28 @@ export function toggle_popover_menu(
 
     // If the window is mobile-sized, we will render the
     // popover centered on the screen as an overlay.
-    if (
+    let show_as_overlay =
         (options?.show_as_overlay_on_mobile === true &&
-            window.innerWidth <= media_breakpoints_num.md) ||
-        options?.show_as_overlay_always === true
+            ui_util.matches_viewport_state("lt_md_min")) ||
+        options?.show_as_overlay_always === true;
+
+    // Show the popover as overlay if the reference element is hidden in message feed.
+    if (
+        !show_as_overlay &&
+        options?.message_feed_overlay_detection &&
+        $(target).parents("#message_feed_container").length === 1
     ) {
+        const target_props = $(target).get_offset_to_window();
+        const viewport_info = message_viewport.message_viewport_info();
+        if (
+            target_props.top < viewport_info.visible_top ||
+            target_props.bottom > viewport_info.visible_bottom
+        ) {
+            show_as_overlay = true;
+        }
+    }
+
+    if (show_as_overlay) {
         mobile_popover_props = {
             ...get_props_for_popover_centering(popover_props),
         };

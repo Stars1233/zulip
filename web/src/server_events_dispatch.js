@@ -16,6 +16,7 @@ import * as compose_closed_ui from "./compose_closed_ui.ts";
 import * as compose_pm_pill from "./compose_pm_pill.ts";
 import * as compose_recipient from "./compose_recipient.ts";
 import * as compose_state from "./compose_state.ts";
+import * as compose_validate from "./compose_validate.ts";
 import {electron_bridge} from "./electron_bridge.ts";
 import * as emoji from "./emoji.ts";
 import * as emoji_picker from "./emoji_picker.ts";
@@ -83,6 +84,7 @@ import * as stream_ui_updates from "./stream_ui_updates.ts";
 import * as sub_store from "./sub_store.ts";
 import * as submessage from "./submessage.ts";
 import * as theme from "./theme.ts";
+import {group_setting_value_schema} from "./types.ts";
 import * as typing_events from "./typing_events.ts";
 import * as unread_ops from "./unread_ops.ts";
 import * as unread_ui from "./unread_ui.ts";
@@ -95,7 +97,10 @@ import * as user_topics from "./user_topics.ts";
 import * as user_topics_ui from "./user_topics_ui.ts";
 
 export function dispatch_normal_event(event) {
-    const noop = function () {};
+    const noop = function () {
+        // Do nothing
+    };
+
     switch (event.type) {
         case "alert_words":
             alert_words.set_words(event.alert_words);
@@ -110,7 +115,7 @@ export function dispatch_normal_event(event) {
             realm.custom_profile_fields = event.fields;
             settings_profile_fields.populate_profile_fields(realm.custom_profile_fields);
             settings_account.add_custom_profile_fields_to_settings();
-            navbar_alerts.maybe_show_empty_required_profile_fields_alert();
+            navbar_alerts.maybe_toggle_empty_required_profile_fields_banner();
             break;
 
         case "default_streams":
@@ -208,20 +213,22 @@ export function dispatch_normal_event(event) {
 
         case "realm": {
             const realm_settings = {
-                allow_edit_history: noop,
                 allow_message_editing: noop,
                 avatar_changes_disabled: settings_account.update_avatar_change_display,
-                bot_creation_policy: settings_bots.update_bot_permissions_ui,
                 can_add_custom_emoji_group: noop,
                 can_add_subscribers_group: noop,
+                can_create_bots_group: noop,
                 can_create_groups: noop,
                 can_create_private_channel_group: noop,
                 can_create_public_channel_group: noop,
+                can_create_write_only_bots_group: noop,
                 can_delete_any_message_group: noop,
                 can_delete_own_message_group: noop,
                 can_manage_all_groups: noop,
+                can_mention_many_users_group: noop,
                 can_move_messages_between_channels_group: noop,
                 can_move_messages_between_topics_group: noop,
+                can_summarize_topics_group: noop,
                 create_multiuse_invite_group: noop,
                 default_code_block_language: noop,
                 default_language: noop,
@@ -238,6 +245,7 @@ export function dispatch_normal_event(event) {
                 mandatory_topics: noop,
                 message_content_edit_limit_seconds: noop,
                 message_content_delete_limit_seconds: noop,
+                message_edit_history_visibility_policy: noop,
                 move_messages_between_streams_limit_seconds: noop,
                 move_messages_within_stream_limit_seconds: message_edit.update_inline_topic_edit_ui,
                 message_retention_days: noop,
@@ -258,8 +266,8 @@ export function dispatch_normal_event(event) {
                 giphy_rating: giphy.update_giphy_rating,
                 waiting_period_threshold: noop,
                 want_advertise_in_communities_directory: noop,
-                wildcard_mention_policy: noop,
                 enable_read_receipts: settings_account.update_send_read_receipts_tooltip,
+                enable_guest_user_dm_warning: compose_validate.warn_if_guest_in_dm_recipient,
                 enable_guest_user_indicator: noop,
             };
             switch (event.op) {
@@ -277,6 +285,10 @@ export function dispatch_normal_event(event) {
                             stream_settings_ui.update_stream_privacy_choices(
                                 "can_create_web_public_channel_group",
                             );
+                        }
+
+                        if (event.property === "mandatory_topics") {
+                            compose_recipient.update_compose_area_placeholder_text();
                         }
                     }
                     break;
@@ -299,10 +311,9 @@ export function dispatch_normal_event(event) {
                                         realm.server_supported_permission_settings.realm,
                                     ).includes(key)
                                 ) {
-                                    const $elem = $(`#id_group_permission_${CSS.escape(key)}`);
-                                    user_group_edit.update_setting_in_group_permissions_panel(
-                                        $elem,
-                                        value,
+                                    user_group_edit.update_realm_setting_in_permissions_panel(
+                                        key,
+                                        group_setting_value_schema.parse(value),
                                     );
                                 }
 
@@ -317,6 +328,13 @@ export function dispatch_normal_event(event) {
 
                                 if (key === "can_add_custom_emoji_group") {
                                     settings_emoji.update_custom_emoji_ui();
+                                }
+
+                                if (
+                                    key === "can_create_bots_group" ||
+                                    key === "can_create_write_only_bots_group"
+                                ) {
+                                    settings_bots.update_bot_permissions_ui();
                                 }
 
                                 if (
@@ -387,7 +405,7 @@ export function dispatch_normal_event(event) {
             if (current_user.is_admin) {
                 // Update the UI notice about the user's profile being
                 // incomplete, as we might have filled in the missing field(s).
-                navbar_alerts.show_profile_incomplete(navbar_alerts.check_profile_incomplete());
+                navbar_alerts.toggle_organization_profile_incomplete_banner();
             }
             break;
         }
@@ -612,7 +630,7 @@ export function dispatch_normal_event(event) {
                 case "delete":
                     for (const stream_id of event.stream_ids) {
                         const was_subscribed = sub_store.get(stream_id).subscribed;
-                        const is_narrowed_to_stream = narrow_state.is_for_stream_id(stream_id);
+                        const is_narrowed_to_stream = narrow_state.narrowed_to_stream_id(stream_id);
                         stream_data.delete_sub(stream_id);
                         stream_settings_ui.remove_stream(stream_id);
                         message_view_header.maybe_rerender_title_area_for_stream(stream_id);
@@ -731,6 +749,25 @@ export function dispatch_normal_event(event) {
             }
             break;
 
+        case "typing_edit_message":
+            if (event.sender_id === current_user.user_id) {
+                // typing edit message notifications are sent to the user who is typing
+                // as well as recipients; we ignore such self-generated events.
+                return;
+            }
+            switch (event.op) {
+                case "start":
+                    typing_events.display_message_edit_notification(event);
+                    break;
+                case "stop":
+                    typing_events.hide_message_edit_notification(event);
+                    break;
+                default:
+                    blueslip.error("Unexpected event type typing_edit_message/" + event.op);
+                    break;
+            }
+            break;
+
         case "user_settings": {
             const notification_name = event.property;
             if (settings_config.all_notification_settings.includes(notification_name)) {
@@ -760,12 +797,12 @@ export function dispatch_normal_event(event) {
             // here from `settings_account` when this file is converted to typescript,
             // and use them instead of `privacy_settings`.
             const privacy_settings = [
-                "send_stream_typing_notifications",
+                "allow_private_data_export",
+                "email_address_visibility",
+                "presence_enabled",
                 "send_private_typing_notifications",
                 "send_read_receipts",
-                "presence_enabled",
-                "email_address_visibility",
-                "allow_private_data_export",
+                "send_stream_typing_notifications",
             ];
 
             if (privacy_settings.includes(event.property)) {
@@ -782,29 +819,30 @@ export function dispatch_normal_event(event) {
 
             const user_preferences = [
                 "color_scheme",
-                "web_font_size_px",
-                "web_line_height_percent",
                 "default_language",
-                "web_home_view",
                 "demote_inactive_streams",
                 "dense_mode",
-                "web_mark_read_on_scroll_policy",
-                "web_channel_default_view",
+                "display_emoji_reaction_users",
                 "emojiset",
-                "web_escape_navigates_to_home_view",
+                "enter_sends",
                 "fluid_layout_width",
+                "hide_ai_features",
                 "high_contrast_mode",
                 "receives_typing_notifications",
+                "starred_message_counts",
                 "timezone",
-                "twenty_four_hour_time",
                 "translate_emoticons",
-                "display_emoji_reaction_users",
+                "twenty_four_hour_time",
                 "user_list_style",
                 "web_animate_image_previews",
-                "web_stream_unreads_count_display_policy",
-                "starred_message_counts",
+                "web_channel_default_view",
+                "web_escape_navigates_to_home_view",
+                "web_font_size_px",
+                "web_home_view",
+                "web_line_height_percent",
+                "web_mark_read_on_scroll_policy",
                 "web_navigate_to_sent_message",
-                "enter_sends",
+                "web_stream_unreads_count_display_policy",
                 "web_suggest_update_timezone",
             ];
 
@@ -1025,7 +1063,7 @@ export function dispatch_normal_event(event) {
 
                 // Update the status text in compose box placeholder when opened to self.
                 if (compose_pm_pill.get_user_ids().includes(event.user_id)) {
-                    compose_recipient.update_placeholder_text();
+                    compose_recipient.update_compose_area_placeholder_text();
                 }
             }
 

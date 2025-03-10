@@ -19,6 +19,9 @@
                                 <span class="recipients_name">{{{rendered_dm_with}}}</span>
                             </span>
                         </a>
+                        <span class="unread_mention_info tippy-zulip-tooltip
+                          {{#unless has_unread_mention}}hidden{{/unless}}"
+                          data-tippy-content="{{t 'You have unread mentions' }}">@</span>
                         <div class="unread-count-focus-outline" tabindex="0" data-col-index="{{ column_indexes.UNREAD_COUNT }}">
                             <span class="unread_count tippy-zulip-tooltip on_hover_dm_read"
                               data-user-ids-string="{{user_ids_string}}" data-tippy-content="{{t 'Mark as read' }}"
@@ -32,7 +35,7 @@
                         </div>
                         <span class="unread_mention_info tippy-zulip-tooltip
                           {{#unless mention_in_unread}}hidden{{/unless}}"
-                          data-tippy-content="{{t 'You have mentions'}}">@</span>
+                          data-tippy-content="{{t 'You have unread mentions'}}">@</span>
                         <div class="unread-count-focus-outline" tabindex="0" data-col-index="{{ column_indexes.UNREAD_COUNT }}">
                             <span class="unread_count tippy-zulip-tooltip on_hover_topic_read"
                               data-stream-id="{{stream_id}}" data-topic-name="{{topic_name}}"
@@ -46,7 +49,7 @@
             {{#unless is_direct}}
             <div class="inbox-right-part-wrapper">
                 <div class="inbox-right-part">
-                    {{#if is_topic}}
+                    {{#if (and is_topic (not stream_archived))}}
                         <span class="visibility-policy-indicator change_visibility_policy hidden-for-spectators{{#if (eq visibility_policy all_visibility_policies.INHERIT)}} inbox-row-visibility-policy-inherit{{/if}}"
                           data-stream-id="{{stream_id}}" data-topic-name="{{topic_name}}" tabindex="0" data-col-index="{{ column_indexes.TOPIC_VISIBILITY }}">
                             {{#if (eq visibility_policy all_visibility_policies.FOLLOWED)}}

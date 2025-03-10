@@ -13,6 +13,7 @@ import type {Message} from "./message_store.ts";
 import * as popover_menus from "./popover_menus.ts";
 import * as reactions from "./reactions.ts";
 import * as rows from "./rows.ts";
+import {message_edit_history_visibility_policy_values} from "./settings_config.ts";
 import {realm} from "./state_data.ts";
 import * as timerender from "./timerender.ts";
 import {
@@ -123,7 +124,7 @@ export function destroy_all_message_list_tooltips(): void {
     message_list_tippy_instances.clear();
 }
 
-function get_last_edit_timestr(message: Message): string {
+function get_last_edit_timestr(message: Message): string | null {
     let last_edit_timestamp;
     if (message.local_edit_timestamp !== undefined) {
         last_edit_timestamp = message.local_edit_timestamp;
@@ -131,6 +132,12 @@ function get_last_edit_timestr(message: Message): string {
         last_edit_timestamp = message.last_edit_timestamp!;
     }
     const last_edit_time = new Date(last_edit_timestamp * 1000);
+
+    // Return null if the timestamp is invalid (i.e., there's no edit history).
+    if (Number.isNaN(last_edit_time.getTime())) {
+        return null;
+    }
+
     let date = timerender.render_date(last_edit_time).textContent;
     // If the date is today or yesterday, we don't want to show the date as capitalized.
     // Thus, we need to check if the date string contains a digit or not using regex,
@@ -365,7 +372,7 @@ export function initialize(): void {
         },
     });
 
-    message_list_tooltip(".message_edit_notice", {
+    message_list_tooltip(".message_edit_notice, .edit-notifications", {
         trigger: "mouseenter",
         delay: LONG_HOVER_DELAY,
         popperOptions: {
@@ -386,16 +393,29 @@ export function initialize(): void {
             const message_container = message_lists.current.view.message_containers.get(message_id);
             assert(message_container !== undefined);
             const last_edit_timestr = get_last_edit_timestr(message_container.msg);
+            if (last_edit_timestr === null) {
+                return false;
+            }
             instance.setContent(
                 parse_html(
                     render_message_edit_notice_tooltip({
                         moved: message_container.moved,
                         last_edit_timestr,
-                        realm_allow_edit_history: realm.realm_allow_edit_history,
+                        realm_message_edit_history_is_visible:
+                            realm.realm_message_edit_history_visibility_policy !==
+                            message_edit_history_visibility_policy_values.never.code,
                     }),
                 ),
             );
+            return undefined;
         },
+        onHidden(instance) {
+            instance.destroy();
+        },
+    });
+
+    message_list_tooltip(".message_expander, .message_condenser", {
+        delay: LONG_HOVER_DELAY,
         onHidden(instance) {
             instance.destroy();
         },

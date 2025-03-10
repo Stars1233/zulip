@@ -118,7 +118,7 @@ test("update_property", ({override}) => {
         "server_supported_permission_settings",
         example_settings.server_supported_permission_settings,
     );
-    override(user_group_edit, "update_setting_in_group_permissions_panel", noop);
+    override(user_group_edit, "update_stream_setting_in_permissions_panel", noop);
     const sub = {...frontend};
     stream_data.add_sub(sub);
 
@@ -290,6 +290,27 @@ test("update_property", ({override}) => {
         assert.equal(args.setting_name, "can_administer_channel_group");
         assert.equal(args.sub.stream_id, stream_id);
         assert.equal(args.val, 3);
+    }
+
+    // Test stream can_subscribe_group change event
+    {
+        const stub = make_stub();
+        override(stream_settings_ui, "update_stream_permission_group_setting", stub.f);
+        const update_subscription_elements_stub = make_stub();
+        override(
+            stream_settings_ui,
+            "update_subscription_elements",
+            update_subscription_elements_stub.f,
+        );
+        stream_events.update_property(stream_id, "can_subscribe_group", 3);
+        assert.equal(stub.num_calls, 1);
+        assert.equal(update_subscription_elements_stub.num_calls, 1);
+        let args = stub.get_args("setting_name", "sub", "val");
+        assert.equal(args.setting_name, "can_subscribe_group");
+        assert.equal(args.sub.stream_id, stream_id);
+        assert.equal(args.val, 3);
+        args = update_subscription_elements_stub.get_args("sub");
+        assert.equal(args.sub, sub);
     }
 
     // Test deprecated properties for coverage.

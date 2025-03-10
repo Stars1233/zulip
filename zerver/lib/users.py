@@ -19,11 +19,7 @@ from zulip_bots.custom_exceptions import ConfigValidationError
 from zerver.lib.avatar import avatar_url, get_avatar_field, get_avatar_for_inaccessible_user
 from zerver.lib.cache import cache_with_key, get_cross_realm_dicts_key
 from zerver.lib.create_user import get_dummy_email_address_for_display_regex
-from zerver.lib.exceptions import (
-    JsonableError,
-    OrganizationAdministratorRequiredError,
-    OrganizationOwnerRequiredError,
-)
+from zerver.lib.exceptions import JsonableError, OrganizationOwnerRequiredError
 from zerver.lib.string_validation import check_string_is_printable
 from zerver.lib.timestamp import timestamp_to_datetime
 from zerver.lib.timezone import canonicalize_timezone
@@ -41,7 +37,7 @@ from zerver.models import (
     UserProfile,
 )
 from zerver.models.groups import SystemGroups
-from zerver.models.realms import BotCreationPolicyEnum, get_fake_email_domain, require_unique_names
+from zerver.models.realms import get_fake_email_domain, require_unique_names
 from zerver.models.users import (
     active_non_guest_user_ids,
     active_user_ids,
@@ -112,7 +108,7 @@ def check_bot_name_available(realm_id: int, full_name: str, *, is_activation: bo
                 f'There is already an active bot named "{full_name}" in this organization. To reactivate this bot, you must rename or deactivate the other one first.'
             )
         else:
-            raise JsonableError(_("Name is already in use!"))
+            raise JsonableError(_("Name is already in use."))
 
 
 def check_short_name(short_name_raw: str) -> str:
@@ -188,20 +184,22 @@ def add_service(
     )
 
 
-def check_bot_creation_policy(user_profile: UserProfile, bot_type: int) -> None:
-    # Realm administrators can always add bot
-    if user_profile.is_realm_admin:
+def check_can_create_bot(user_profile: UserProfile, bot_type: int) -> None:
+    if user_has_permission_for_group_setting(
+        user_profile.realm.can_create_bots_group,
+        user_profile,
+        Realm.REALM_PERMISSION_GROUP_SETTINGS["can_create_bots_group"],
+    ):
         return
 
-    if user_profile.realm.bot_creation_policy == BotCreationPolicyEnum.EVERYONE:
-        return
-    if user_profile.realm.bot_creation_policy == BotCreationPolicyEnum.ADMINS_ONLY:
-        raise OrganizationAdministratorRequiredError
-    if (
-        user_profile.realm.bot_creation_policy == BotCreationPolicyEnum.LIMIT_GENERIC_BOTS
-        and bot_type == UserProfile.DEFAULT_BOT
+    if bot_type == UserProfile.INCOMING_WEBHOOK_BOT and user_has_permission_for_group_setting(
+        user_profile.realm.can_create_write_only_bots_group,
+        user_profile,
+        Realm.REALM_PERMISSION_GROUP_SETTINGS["can_create_write_only_bots_group"],
     ):
-        raise OrganizationAdministratorRequiredError
+        return
+
+    raise JsonableError(_("Insufficient permission"))
 
 
 def check_valid_bot_type(user_profile: UserProfile, bot_type: int) -> None:
@@ -499,15 +497,6 @@ def get_accounts_for_email(email: str) -> list[Account]:
     ]
 
 
-def get_api_key(user_profile: UserProfile) -> str:
-    return user_profile.api_key
-
-
-def get_all_api_keys(user_profile: UserProfile) -> list[str]:
-    # Users can only have one API key for now
-    return [user_profile.api_key]
-
-
 def validate_user_custom_profile_field(
     realm_id: int, field: CustomProfileField, value: ProfileDataElementValue
 ) -> ProfileDataElementValue:
@@ -575,7 +564,6 @@ class APIUserDict(TypedDict):
     is_admin: bool
     is_owner: bool
     is_guest: bool
-    is_billing_admin: NotRequired[bool]
     role: int
     is_bot: bool
     full_name: str
@@ -623,7 +611,6 @@ def format_user_row(
         is_admin=is_admin,
         is_owner=is_owner,
         is_guest=is_guest,
-        is_billing_admin=row["is_billing_admin"],
         role=row["role"],
         is_bot=is_bot,
         full_name=row["full_name"],
@@ -639,7 +626,6 @@ def format_user_row(
     if acting_user is None:
         # Remove data about other users which are not useful to spectators
         # or can reveal personal information about a user.
-        del result["is_billing_admin"]
         del result["timezone"]
 
     # Zulip clients that support using `GET /avatar/{user_id}` as a
@@ -969,7 +955,6 @@ def user_profile_to_user_row(user_profile: UserProfile) -> RawUserDict:
         avatar_version=user_profile.avatar_version,
         is_active=user_profile.is_active,
         role=user_profile.role,
-        is_billing_admin=user_profile.is_billing_admin,
         is_bot=user_profile.is_bot,
         timezone=user_profile.timezone,
         date_joined=user_profile.date_joined,
@@ -1022,7 +1007,6 @@ def get_data_for_inaccessible_user(realm: Realm, user_id: int) -> APIUserDict:
         is_admin=False,
         is_owner=False,
         is_guest=False,
-        is_billing_admin=False,
         role=UserProfile.ROLE_MEMBER,
         is_bot=False,
         full_name=str(UserProfile.INACCESSIBLE_USER_NAME),

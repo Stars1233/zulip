@@ -80,9 +80,7 @@
     border: 1px solid var(--color-border-popover-menu);
     border-radius: 6px;
     box-shadow: var(--box-shadow-popover-menu);
-    /* Popover menus should scale no smaller than 15px,
-       but scale up with the base font-size. */
-    font-size: max(15px, var(--base-font-size-px));
+    font-size: 1.0714em; /* 15px at 14px em */
 
     > .tippy-content {
         padding: 0;
@@ -177,7 +175,6 @@
         color: var(--color-text-item);
 
         &:hover {
-            color: var(--color-text-link);
             text-decoration: none;
         }
 
@@ -475,6 +472,7 @@ ul.popover-group-menu-member-list {
 
     .deactivated-user-icon {
         vertical-align: middle;
+        font-size: 0.7em;
     }
 
     #default-section {
@@ -544,7 +542,8 @@ ul.popover-group-menu-member-list {
         }
 
         .stream-privacy {
-            display: inline-block;
+            display: flex;
+            align-items: center;
         }
 
         .filter-icon i {
@@ -590,6 +589,9 @@ ul.popover-group-menu-member-list {
             text-overflow: ellipsis;
             overflow: hidden;
             margin-bottom: 0;
+            /* Override default modal input width, since that overflows.
+               This is 185px (the default "width: unset" width) at 14px/em */
+            width: 13.2142em;
         }
 
         .group-search:placeholder-shown + #clear_groups_search,
@@ -634,17 +636,21 @@ ul.popover-group-menu-member-list {
                 & td {
                     padding: 4px 0;
 
-                    &:first-of-type {
-                        padding-left: 10px;
-                    }
-
-                    &:last-of-type {
-                        padding-right: 10px;
-                    }
-
                     &.remove_subscription,
                     &.remove_member {
                         text-align: right;
+                        padding-right: 10px;
+                    }
+
+                    &.user-profile-channel-row,
+                    &.user-profile-group-row {
+                        text-align: left;
+                        padding-left: 10px;
+
+                        & .user-profile-channel-container {
+                            display: flex;
+                            gap: 3px;
+                        }
                     }
                 }
             }
@@ -887,9 +893,8 @@ ul.popover-group-menu-member-list {
     }
 
     #move_messages_count {
-        margin-top: -20px;
-        font-style: italic;
-        opacity: 0.7;
+        /* Disabled pending fixes to the logic. */
+        display: none;
     }
 
     .topic_stream_edit_header {
@@ -989,13 +994,13 @@ ul.popover-group-menu-member-list {
     .popover-menu-user-avatar-container {
         position: relative;
         flex-shrink: 0;
-        width: 64px;
-        height: 64px;
+        width: var(--length-user-popover-menu-avatar);
+        height: var(--length-user-popover-menu-avatar);
     }
 
     .popover-menu-user-avatar {
-        width: 64px;
-        height: 64px;
+        width: var(--length-user-popover-menu-avatar);
+        height: var(--length-user-popover-menu-avatar);
         border-radius: 4px;
         background-size: cover;
         background-position: center;
@@ -1005,13 +1010,19 @@ ul.popover-group-menu-member-list {
         position: absolute;
         /* Presence dot does not scale, because
            the avatar itself does not scale. */
-        font-size: 8px;
+        font-size: var(--length-user-status-circle-popover-menu);
         line-height: 1;
         right: -1px;
         bottom: -1px;
         background-color: var(--color-background-popover-menu);
         border: solid 1px var(--color-background-popover-menu);
         border-radius: 50%;
+
+        &.deactivated-user-icon {
+            font-size: 0.8em;
+            background-color: var(--color-background-popover-menu);
+            padding: 1px;
+        }
     }
 
     .popover-menu-user-info {
@@ -1028,7 +1039,6 @@ ul.popover-group-menu-member-list {
         line-height: 1.1111em;
         color: var(--color-text-full-name);
         overflow-wrap: anywhere;
-        user-select: text;
 
         .zulip-icon.zulip-icon-bot {
             vertical-align: middle;
@@ -1094,8 +1104,6 @@ ul.popover-group-menu-member-list {
         position: absolute;
         top: unset;
         left: unset;
-        /* Presence dot does not scale, because
-           the avatar itself does not scale. */
         font-size: var(--length-user-status-circle);
         line-height: 1;
         right: -1px;
